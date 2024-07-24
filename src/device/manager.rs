@@ -1,5 +1,6 @@
 use paperclip::actix::Apiv2Schema;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::{Hash, Hasher},
@@ -19,6 +20,7 @@ struct Device {
     source: SourceSelection,
     handler: super::devices::DeviceActorHandler,
     actor: tokio::task::JoinHandle<DeviceActor>,
+    broadcast: Option<tokio::task::JoinHandle<()>>,
     status: DeviceStatus,
     device_type: DeviceSelection,
 }
@@ -76,6 +78,7 @@ pub struct SourceSerialStruct {
 pub enum DeviceStatus {
     Running,
     Stopped,
+    Broadcasting,
 }
 
 pub struct DeviceManager {
@@ -105,7 +108,7 @@ pub enum Answer {
 pub enum ManagerError {
     DeviceNotExist(Uuid),
     DeviceAlreadyExist(Uuid),
-    DeviceIsStopped(Uuid),
+    DeviceStatus(DeviceStatus, Uuid),
     DeviceError(super::devices::DeviceError),
     DeviceSourceError(String),
     NoDevices,
@@ -128,6 +131,8 @@ pub enum Request {
     Search,
     Ping(DeviceRequestStruct),
     GetDeviceHandler(Uuid),
+    EnableBroadcasting(Uuid),
+    DisableBroadcasting(Uuid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,6 +170,24 @@ impl DeviceManager {
                 let result = self.list().await;
                 if let Err(e) = actor_request.respond_to.send(result) {
                     error!("DeviceManager: Failed to return List response: {:?}", e);
+                }
+            }
+            Request::EnableBroadcasting(uuid) => {
+                let result = self.broadcast(uuid).await;
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!(
+                        "DeviceManager: Failed to return EnableBroadcasting response: {:?}",
+                        e
+                    );
+                }
+            }
+            Request::DisableBroadcasting(uuid) => {
+                let result = self.broadcast_off(uuid).await;
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!(
+                        "DeviceManager: Failed to return DisableBroadcasting response: {:?}",
+                        e
+                    );
                 }
             }
             Request::GetDeviceHandler(id) => {
@@ -318,12 +341,17 @@ impl DeviceManager {
             handler,
             actor,
             status: DeviceStatus::Running,
+            broadcast: None,
             device_type: device_selection,
         };
 
         let device_info = device.info();
 
         self.device.insert(hash, device);
+
+        //devices start broadcasting by default
+        info!("Device broadcast enable by default for: {:?}", device_info);
+        let _ = self.broadcast(hash).await;
 
         info!(
             "New device created and available, details: {:?}",
@@ -367,18 +395,190 @@ impl DeviceManager {
                 device_id
             );
 
-            if self.device.get(&device_id).unwrap().status == DeviceStatus::Running {
-                let handler: DeviceActorHandler =
-                    self.device.get(&device_id).unwrap().handler.clone();
-                return Ok(Answer::InnerDeviceHandler(handler));
-            };
-            return Err(ManagerError::DeviceIsStopped(device_id));
+            // Fail-fast if device is stopped
+            self.check_device_status(
+                &device_id,
+                &[DeviceStatus::Broadcasting, DeviceStatus::Running],
+            )?;
+
+            let handler: DeviceActorHandler = self.device.get(&device_id).unwrap().handler.clone();
+            return Ok(Answer::InnerDeviceHandler(handler));
         }
         error!(
             "Getting device handler for device: {:?} : Error, device doesn't exist",
             device_id
         );
         Err(ManagerError::DeviceNotExist(device_id))
+    }
+
+    pub async fn broadcast(&mut self, device_id: Uuid) -> Result<Answer, ManagerError> {
+        let device_handler = self.get_device_handler(device_id).await?;
+        self.check_device_status(&device_id, &[DeviceStatus::Running])?;
+        let device_type = self.device_type(&device_id)?;
+
+        let handler = self.extract_handler(device_handler)?;
+
+        let subscriber = self.get_subscriber(&handler).await?;
+
+        let broadcast_handle = self.start_broadcasting(subscriber, device_id, device_type);
+
+        let device = self.device.get_mut(&device_id).unwrap();
+        device.broadcast = Some(broadcast_handle);
+        device.status = DeviceStatus::Broadcasting;
+
+        let id = <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id();
+
+        let _ = handler
+            .send(super::devices::PingRequest::Ping1D(
+                super::devices::Ping1DRequest::ContinuousStart(
+                    bluerobotics_ping::ping1d::ContinuousStartStruct { id },
+                ),
+            ))
+            .await;
+
+        let updated_device_info = self.device.get(&device_id).unwrap().info();
+        Ok(Answer::DeviceInfo(vec![updated_device_info]))
+    }
+
+    pub async fn broadcast_off(&mut self, device_id: Uuid) -> Result<Answer, ManagerError> {
+        let device_handler = self.get_device_handler(device_id).await?;
+        self.check_device_status(&device_id, &[DeviceStatus::Broadcasting])?;
+
+        let handler = self.extract_handler(device_handler)?;
+
+        let device = self.device.get_mut(&device_id).unwrap();
+        if let Some(broadcast) = device.broadcast.take() {
+            broadcast.abort_handle().abort();
+        }
+
+        device.status = DeviceStatus::Running;
+
+        let id = <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id();
+
+        let _ = handler
+            .send(super::devices::PingRequest::Ping1D(
+                super::devices::Ping1DRequest::ContinuousStop(
+                    bluerobotics_ping::ping1d::ContinuousStopStruct { id },
+                ),
+            ))
+            .await;
+
+        let updated_device_info = self.device.get(&device_id).unwrap().info();
+        Ok(Answer::DeviceInfo(vec![updated_device_info]))
+    }
+
+    fn check_device_status(
+        &self,
+        device_id: &Uuid,
+        valid_statuses: &[DeviceStatus],
+    ) -> Result<(), ManagerError> {
+        let status = &self.device.get(device_id).unwrap().status;
+        if !valid_statuses.contains(status) {
+            return Err(ManagerError::DeviceStatus(status.clone(), *device_id));
+        }
+        Ok(())
+    }
+
+    fn device_type(
+        &self,
+        device_id: &Uuid,
+    ) -> Result<DeviceSelection, ManagerError> {
+        let device_type = self.device.get(device_id).unwrap().device_type.clone();
+        Ok(device_type)
+    }
+
+    fn extract_handler(&self, device_handler: Answer) -> Result<DeviceActorHandler, ManagerError> {
+        match device_handler {
+            Answer::InnerDeviceHandler(handler) => Ok(handler),
+            _ => todo!(),
+        }
+    }
+
+    async fn get_subscriber(
+        &self,
+        handler: &DeviceActorHandler,
+    ) -> Result<
+        tokio::sync::broadcast::Receiver<bluerobotics_ping::message::ProtocolMessage>,
+        ManagerError,
+    > {
+        let subscriber = handler
+            .send(super::devices::PingRequest::GetSubscriber)
+            .await
+            .unwrap();
+
+        match subscriber {
+            super::devices::PingAnswer::Subscriber(subscriber) => Ok(subscriber),
+            _ => todo!(),
+        }
+    }
+
+    fn handle_ping1d_message(msg: bluerobotics_ping::message::ProtocolMessage, device_id: Uuid) {
+        if msg.message_id == <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id() {
+            if let Ok(bluerobotics_ping::Messages::Ping1D(bluerobotics_ping::ping1d::Messages::Profile(_answer))) = bluerobotics_ping::Messages::try_from(&msg) {
+                let answer = Answer::DeviceMessage(DeviceAnswer {
+                    answer: super::devices::PingAnswer::PingMessage(
+                        bluerobotics_ping::Messages::try_from(&msg).unwrap(),
+                    ),
+                    device_id,
+                });
+                crate::server::protocols::v1::websocket::send_to_websockets(json!(answer), Some(device_id));
+            }
+        }
+    }
+
+    fn handle_ping360_message(msg: bluerobotics_ping::message::ProtocolMessage, device_id: Uuid) {
+        if msg.message_id == <bluerobotics_ping::ping360::DeviceDataStruct as bluerobotics_ping::message::MessageInfo>::id() {
+            if let Ok(bluerobotics_ping::Messages::Ping360(bluerobotics_ping::ping360::Messages::DeviceData(_answer))) = bluerobotics_ping::Messages::try_from(&msg) {
+                let answer = Answer::DeviceMessage(DeviceAnswer {
+                    answer: super::devices::PingAnswer::PingMessage(
+                        bluerobotics_ping::Messages::try_from(&msg).unwrap(),
+                    ),
+                    device_id,
+                });
+                crate::server::protocols::v1::websocket::send_to_websockets(json!(answer), Some(device_id));
+            }
+        }
+    }
+
+    fn handle_broadcast_message(
+        msg: bluerobotics_ping::message::ProtocolMessage,
+        device_id: Uuid,
+        selection: DeviceSelection,
+    ) {
+        match selection {
+            DeviceSelection::Ping1D  => {
+                Self::handle_ping1d_message(msg.clone(), device_id);
+            }
+            DeviceSelection::Ping360 => {
+                Self::handle_ping360_message(msg.clone(), device_id);
+            }
+            DeviceSelection::Common | DeviceSelection::Auto => {
+                // TODO: Handle common messages if any
+            }
+        }
+    }
+
+    fn start_broadcasting(
+        &self,
+        mut subscriber: tokio::sync::broadcast::Receiver<bluerobotics_ping::message::ProtocolMessage>,
+        device_id: Uuid,
+        device_type: DeviceSelection
+    ) -> tokio::task::JoinHandle<()> {
+
+        tokio::spawn(async move {
+            loop {
+                match subscriber.recv().await {
+                    Ok(msg) => {
+                        Self::handle_broadcast_message(msg, device_id, device_type.clone());
+                    }
+                    Err(_e) => {
+                        let error = ManagerError::DeviceError(super::devices::DeviceError::PingError(bluerobotics_ping::error::PingError::TokioBroadcastError(_e.to_string())));
+                        crate::server::protocols::v1::websocket::send_to_websockets(json!(error), Some(device_id));
+                        break;
+                    }
+                }
+            }
+        })
     }
 }
 
