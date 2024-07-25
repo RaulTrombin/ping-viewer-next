@@ -1,5 +1,6 @@
 use paperclip::actix::Apiv2Schema;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::{Hash, Hasher},
@@ -19,6 +20,7 @@ struct Device {
     source: SourceSelection,
     handler: super::devices::DeviceActorHandler,
     actor: tokio::task::JoinHandle<DeviceActor>,
+    broadcast: Option<tokio::task::JoinHandle<()>>,
     status: DeviceStatus,
     device_type: DeviceSelection,
 }
@@ -112,6 +114,7 @@ pub enum ManagerError {
     NoDevices,
     TokioMpsc(String),
     NotImplemented(Request),
+    Other(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -172,6 +175,24 @@ impl DeviceManager {
                 let result = self.info(device_id).await;
                 if let Err(e) = actor_request.respond_to.send(result) {
                     error!("DeviceManager: Failed to return Info response: {:?}", e);
+                }
+            }
+            Request::EnableBroadcasting(uuid) => {
+                let result = self.broadcast(uuid).await;
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!(
+                        "DeviceManager: Failed to return EnableBroadcasting response: {:?}",
+                        e
+                    );
+                }
+            }
+            Request::DisableBroadcasting(uuid) => {
+                let result = self.broadcast_off(uuid).await;
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!(
+                        "DeviceManager: Failed to return DisableBroadcasting response: {:?}",
+                        e
+                    );
                 }
             }
             Request::GetDeviceHandler(id) => {
@@ -328,12 +349,16 @@ impl DeviceManager {
             handler,
             actor,
             status: DeviceStatus::Running,
+            broadcast: None,
             device_type: device_selection,
         };
 
         let device_info = device.info();
 
         self.device.insert(hash, device);
+
+        trace!("Device broadcast enable by default for: {:?}", device_info);
+        let _ = self.broadcast(hash).await?;
 
         info!(
             "New device created and available, details: {:?}",
@@ -392,8 +417,6 @@ impl DeviceManager {
     }
 
     pub async fn get_device_handler(&self, device_id: Uuid) -> Result<Answer, ManagerError> {
-        if self.device.contains_key(&device_id) {
-            trace!("Getting device handler for device: {device_id:?} : Success");
         self.check_device_uuid(device_id)?;
 
         trace!(
@@ -401,18 +424,15 @@ impl DeviceManager {
             device_id
         );
 
-            if self.device.get(&device_id).unwrap().status == DeviceStatus::Running {
-                let handler: DeviceActorHandler =
-                    self.device.get(&device_id).unwrap().handler.clone();
-                return Ok(Answer::InnerDeviceHandler(handler));
-            };
-            return Err(ManagerError::DeviceIsStopped(device_id));
-        }
-        error!(
-            "Getting device handler for device: {:?} : Error, device doesn't exist",
-            device_id
-        );
-        Err(ManagerError::DeviceNotExist(device_id))
+        // Fail-fast if device is stopped
+        self.check_device_status(
+            device_id,
+            &[DeviceStatus::Broadcasting, DeviceStatus::Running],
+        )?;
+
+        let handler: DeviceActorHandler = self.get_device(device_id)?.handler.clone();
+
+        Ok(Answer::InnerDeviceHandler(handler))
     }
 
     fn check_device_status(
@@ -425,14 +445,6 @@ impl DeviceManager {
             return Err(ManagerError::DeviceStatus(status.clone(), device_id));
         }
         Ok(())
-    }
-
-    fn get_device(&self, device_id: Uuid) -> Result<&Device, ManagerError> {
-        let device = self
-            .device
-            .get(&device_id)
-            .ok_or(ManagerError::DeviceNotExist(device_id))?;
-        Ok(device)
     }
 
     fn get_mut_device(&mut self, device_id: Uuid) -> Result<&mut Device, ManagerError> {
@@ -481,6 +493,174 @@ impl DeviceManager {
                 "Unreachable: get_subscriber helper".to_string(),
             )),
         }
+    }
+
+    pub async fn broadcast(&mut self, device_id: Uuid) -> Result<Answer, ManagerError> {
+        self.check_device_status(device_id, &[DeviceStatus::Running])?;
+        let device_type = self.get_device_type(device_id)?;
+
+        // Get an inner subscriber for device's stream
+        let subscriber = self.get_subscriber(device_id).await?;
+
+        let broadcast_handle = self.start_broadcasting(subscriber, device_id, device_type.clone());
+
+        let device = self.get_mut_device(device_id)?;
+        device.broadcast = broadcast_handle;
+        device.status = DeviceStatus::Broadcasting;
+
+        self.broadcast_startup_routine(device_id, device_type)
+            .await?;
+
+        let updated_device_info = self.get_device(device_id)?.info();
+
+        Ok(Answer::DeviceInfo(vec![updated_device_info]))
+    }
+
+    pub async fn broadcast_off(&mut self, device_id: Uuid) -> Result<Answer, ManagerError> {
+        self.check_device_status(device_id, &[DeviceStatus::Broadcasting])?;
+        let device_type = self.get_device_type(device_id)?;
+
+        let device = self.get_mut_device(device_id)?;
+        if let Some(broadcast) = device.broadcast.take() {
+            broadcast.abort_handle().abort();
+        }
+
+        device.status = DeviceStatus::Running;
+
+        let updated_device_info = device.info();
+
+        self.broadcast_stop_routine(device_id, device_type).await?;
+
+        Ok(Answer::DeviceInfo(vec![updated_device_info]))
+    }
+
+    // Series of inner helpers specially for broadcast methods
+
+    // Call the helpers specifically for each device type
+    fn start_broadcasting(
+        &self,
+        mut subscriber: tokio::sync::broadcast::Receiver<
+            bluerobotics_ping::message::ProtocolMessage,
+        >,
+        device_id: Uuid,
+        device_type: DeviceSelection,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        match device_type {
+            DeviceSelection::Ping1D => Some(tokio::spawn(async move {
+                loop {
+                    match subscriber.recv().await {
+                        Ok(msg) => {
+                            Self::ping1d_broadcast_helper(msg, device_id);
+                        }
+                        Err(_e) => {
+                            Self::handle_error_broadcast_message(_e, device_id);
+                            break;
+                        }
+                    }
+                }
+            })),
+            DeviceSelection::Ping360 => Some(tokio::spawn(async move {
+                loop {
+                    match subscriber.recv().await {
+                        Ok(msg) => {
+                            Self::ping360_broadcast_helper(msg, device_id);
+                        }
+                        Err(_e) => {
+                            Self::handle_error_broadcast_message(_e, device_id);
+                            break;
+                        }
+                    }
+                }
+            })),
+            DeviceSelection::Common | DeviceSelection::Auto => None,
+        }
+    }
+
+    // Execute some especial commands required for device enter in auto_send mode
+    async fn broadcast_startup_routine(
+        &self,
+        device_id: Uuid,
+        device_type: DeviceSelection,
+    ) -> Result<(), ManagerError> {
+        if device_type == DeviceSelection::Ping1D {
+            let handler_request = self.get_device_handler(device_id).await?;
+            let handler = self.extract_handler(handler_request)?;
+
+            let id = <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id();
+            let _ = handler
+                .send(super::devices::PingRequest::Ping1D(
+                    super::devices::Ping1DRequest::ContinuousStart(
+                        bluerobotics_ping::ping1d::ContinuousStartStruct { id },
+                    ),
+                ))
+                .await
+                .map_err(|err| {trace!("Something went wrong while executing broadcast_startup_routine, details: {err:?}"); ManagerError::DeviceError(err)})?;
+        }
+        Ok(())
+    }
+
+    // Execute some especial commands required for device stop auto_send mode
+    async fn broadcast_stop_routine(
+        &self,
+        device_id: Uuid,
+        device_type: DeviceSelection,
+    ) -> Result<(), ManagerError> {
+        let handler_request = self.get_device_handler(device_id).await?;
+        let handler = self.extract_handler(handler_request)?;
+
+        if device_type == DeviceSelection::Ping1D {
+            let id = <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id();
+            let _ = handler
+                .send(super::devices::PingRequest::Ping1D(
+                    super::devices::Ping1DRequest::ContinuousStop(
+                        bluerobotics_ping::ping1d::ContinuousStopStruct { id },
+                    ),
+                ))
+                .await
+                .map_err(|err| {trace!("Something went wrong while executing broadcast_startup_routine, details: {err:?}"); ManagerError::DeviceError(err)})?;
+        }
+        Ok(())
+    }
+
+    // An inner helper focused on Ping1D, which uses Profile message to plot graphs
+    fn ping1d_broadcast_helper(msg: bluerobotics_ping::message::ProtocolMessage, device_id: Uuid) {
+        if msg.message_id == <bluerobotics_ping::ping1d::ProfileStruct as bluerobotics_ping::message::MessageInfo>::id() {
+            if let Ok(bluerobotics_ping::Messages::Ping1D(bluerobotics_ping::ping1d::Messages::Profile(_answer))) = bluerobotics_ping::Messages::try_from(&msg) {
+                let answer = Answer::DeviceMessage(DeviceAnswer {
+                    answer: super::devices::PingAnswer::PingMessage(
+                        bluerobotics_ping::Messages::try_from(&msg).unwrap(),
+                    ),
+                    device_id,
+                });
+                crate::server::protocols::v1::websocket::send_to_websockets(json!(answer), Some(device_id));
+            }
+        }
+    }
+
+    // An inner helper focused on Ping360, which uses DeviceData message to plot graphs
+    fn ping360_broadcast_helper(msg: bluerobotics_ping::message::ProtocolMessage, device_id: Uuid) {
+        if msg.message_id == <bluerobotics_ping::ping360::DeviceDataStruct as bluerobotics_ping::message::MessageInfo>::id() {
+            if let Ok(bluerobotics_ping::Messages::Ping360(bluerobotics_ping::ping360::Messages::DeviceData(_answer))) = bluerobotics_ping::Messages::try_from(&msg) {
+                let answer = Answer::DeviceMessage(DeviceAnswer {
+                    answer: super::devices::PingAnswer::PingMessage(
+                        bluerobotics_ping::Messages::try_from(&msg).unwrap(),
+                    ),
+                    device_id,
+                });
+                crate::server::protocols::v1::websocket::send_to_websockets(json!(answer), Some(device_id));
+            }
+        }
+    }
+
+    // An inner helper that returns error to requester
+    fn handle_error_broadcast_message(
+        error: tokio::sync::broadcast::error::RecvError,
+        device_id: Uuid,
+    ) {
+        let error = ManagerError::DeviceError(super::devices::DeviceError::PingError(
+            bluerobotics_ping::error::PingError::TokioBroadcastError(error.to_string()),
+        ));
+        crate::server::protocols::v1::websocket::send_to_websockets(json!(error), Some(device_id));
     }
 }
 
