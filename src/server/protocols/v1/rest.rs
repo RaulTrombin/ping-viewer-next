@@ -29,6 +29,12 @@ async fn index() -> impl Responder {
     handle_embedded_file("index.html")
 }
 
+#[api_v2_operation(skip)]
+#[get("/{file_path:.*}")]
+async fn index_files(file_path: web::Path<String>) -> impl Responder {
+    handle_embedded_file(&file_path)
+}
+
 /// The "register_service" route is used by BlueOS extensions manager
 #[api_v2_operation]
 #[get("register_service")]
@@ -38,7 +44,8 @@ async fn server_metadata() -> Result<Json<ServerMetadata>, Error> {
 }
 
 pub fn register_services(cfg: &mut web::ServiceConfig) {
-    cfg.service(index).service(post_request);
+    cfg.service(index).service(post_request)
+    .service(index_files);
 }
 
 #[api_v2_operation]
