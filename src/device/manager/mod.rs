@@ -4,6 +4,7 @@ pub mod continuous_mode;
 pub mod device_handle;
 
 use paperclip::actix::Apiv2Schema;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
@@ -65,6 +66,7 @@ impl Drop for Device {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub enum DeviceSelection {
     Common,
     Ping1D,
@@ -73,6 +75,8 @@ pub enum DeviceSelection {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Hash, Apiv2Schema)]
+#[derive(JsonSchema)]
+
 pub enum SourceSelection {
     UdpStream(SourceUdpStruct),
     SerialStream(SourceSerialStruct),
@@ -84,12 +88,14 @@ enum SourceType {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub struct SourceUdpStruct {
     pub ip: Ipv4Addr,
     pub port: u16,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub struct SourceSerialStruct {
     pub path: String,
     pub baudrate: u32,
@@ -146,6 +152,7 @@ pub struct DeviceAnswer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 #[serde(tag = "command", content = "payload")]
 pub enum Request {
     AutoCreate,
@@ -161,6 +168,7 @@ pub enum Request {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub struct UuidWrapper {
     pub uuid: Uuid,
 }
@@ -173,12 +181,14 @@ impl Deref for UuidWrapper {
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub struct CreateStruct {
     pub source: SourceSelection,
     pub device_selection: DeviceSelection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(JsonSchema)]
 pub struct DeviceRequestStruct {
     pub uuid: Uuid,
     pub device_request: crate::device::devices::PingRequest,

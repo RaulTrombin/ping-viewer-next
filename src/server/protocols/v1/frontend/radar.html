@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Plot</title>
+    <style>
+        #radarCanvas {
+            background-color: #001950;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="deviceNumber" placeholder="Enter device number" />
+        <button onclick="connectWebSocket()">Connect</button>
+        <button onclick="closeWebSocket()">Close</button>
+        <br><br>
+        <label for="scalingFactor">Scaling Factor:</label>
+        <input type="range" id="scalingFactor" min="1" max="50" value="10" />
+        <span id="scalingValue">10</span>
+        <br><br>
+        <button onclick="clearRadarPlot()">Clear</button>
+    </div>
+    <canvas id="radarCanvas" width="800" height="800"></canvas>
+    <script src="src/radar.js"></script>
+</body>
+</html>

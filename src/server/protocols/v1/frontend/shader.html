@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Sonar Display with WebSocket Integration</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas { display: block; }
+        #controls { position: absolute; top: 10px; left: 10px; }
+    </style>
+<meta id="bbafmabaelnnkondpfpjmdklbmfnbmol"></head>
+<body>
+<div id="controls" style="margin-left: 800px;">
+    <input type="text" id="deviceNumber" value="00000000-0000-0000-001e-10da679f8cee" placeholder="Enter device number">
+    <button onclick="connectWebSocket()">Connect</button>
+    <button onclick="fakeWebSocket()">Fake it</button>
+</div>
+<script>
+// Initialize WebGL context
+const canvas = document.createElement('canvas');
+document.body.appendChild(canvas);
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl');
+
+// Vertex shader source
+const vsSource = `
+  attribute vec4 aVertexPosition;
+  attribute vec2 aTextureCoord;
+  varying vec2 vTextureCoord;
+  void main(void) {
+    gl_Position = aVertexPosition;
+    vTextureCoord = aTextureCoord;
+  }
+`;
+
+// Fragment shader source for polar effect
+const fsSource = `
+  precision highp float;
+  varying vec2 vTextureCoord;
+  uniform sampler2D uSampler;
+
+  void main(void) {
+    vec2 polar = vTextureCoord;
+    float angle = atan(polar.y - 0.5, polar.x - 0.5) + 3.14159/2.0;
+    float radius = length(polar - 0.5) * 2.0;
+
+    // "overview" effect on top left
+    if (polar.x < 0.2 && polar.y < 0.2) {
+      gl_FragColor = texture2D(uSampler, polar*5.0);
+      return;
+    }
+    // actual plot
+    if (radius > 1.0) {
+      gl_FragColor = vec4(0.1, 0.1, 0.1, 1.0);
+    } else {
+      float texAngle = (angle + 3.14159) / (2.0 * 3.14159);
+      if (texAngle > 1.0) {
+        texAngle -= 1.0;
+      }
+      float intensity = texture2D(uSampler, vec2(radius, texAngle)).r;
+      gl_FragColor = vec4(intensity, intensity, intensity, 1.0);
+    }
+  }
+`;
+
+function initShaderProgram(gl, vsSource, fsSource) {
+  const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+  const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+  const shaderProgram = gl.createProgram();
+  gl.attachShader(shaderProgram, vertexShader);
+  gl.attachShader(shaderProgram, fragmentShader);
+  gl.linkProgram(shaderProgram);
+
+  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+    console.error('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
+    return null;
+  }
+
+  return shaderProgram;
+}
+
+function loadShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+
+  return shader;
+}
+
+const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+
+// Set up buffers and attributes
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+const positions = [
+  -1.0,  1.0,
+   1.0,  1.0,
+  -1.0, -1.0,
+   1.0, -1.0,
+];
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+const textureCoordBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
+const textureCoordinates = [
+  0.0,  0.0,
+  1.0,  0.0,
+  0.0,  1.0,
+  1.0,  1.0,
+];
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), gl.STATIC_DRAW);
+
+// Create and bind texture
+const texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+const NUM_LINES = 400;
+const LINE_LENGTH = 1200;
+const intensityData = new Uint8Array(NUM_LINES * LINE_LENGTH);
+let currentAngle = 0;
+
+function updateTexture() {
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, LINE_LENGTH, NUM_LINES, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, intensityData);
+}
+
+function render() {
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.useProgram(shaderProgram);
+
+  const vertexPosition = gl.getAttribLocation(shaderProgram, 'aVertexPosition');
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.vertexAttribPointer(vertexPosition, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(vertexPosition);
+
+  const textureCoord = gl.getAttribLocation(shaderProgram, 'aTextureCoord');
+  gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
+  gl.vertexAttribPointer(textureCoord, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(textureCoord);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.uniform1i(gl.getUniformLocation(shaderProgram, 'uSampler'), 0);
+
+  gl.uniform1f(gl.getUniformLocation(shaderProgram, 'uAngle'), currentAngle);
+  gl.uniform1f(gl.getUniformLocation(shaderProgram, 'uNumLines'), NUM_LINES);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// WebSocket connection
+let socket;
+let last_angle = 0;
+
+function connectWebSocket() {
+    const deviceNumber = document.getElementById('deviceNumber').value.trim();
+    if (!deviceNumber) {
+        alert("Please enter a device number.");
+        return;
+    }
+    if (socket) {
+        socket.close();
+    }
+
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+
+    // socket = new WebSocket(`ws://raulsyellowsubmarine.duckdns.org:9997/ws?device_number=${deviceNumber}`);
+    socket = new WebSocket(`${protocol}//${host}/ws?device_number=${deviceNumber}`);
+
+
+socket.addEventListener('open', function() {
+        console.log("WebSocket connected.");
+    });
+    socket.addEventListener('message', function(event) {
+        const message = JSON.parse(event.data);
+        const deviceData = message.DeviceMessage.PingMessage.Ping360.DeviceData;
+        const angle = deviceData.angle;
+        const newIntensityData = deviceData.data.map(value => value);
+        if (angle - last_angle > 1) {
+          console.log("Angle jump detected: ", last_angle, angle);
+        }
+        last_angle = angle;
+        console.log("Received sonar data at angle:", angle);
+        updateSonarData(angle, newIntensityData);
+    });
+    socket.addEventListener('close', function() {
+        console.log("WebSocket closed.");
+    });
+    socket.addEventListener('error', function(error) {
+        console.error("WebSocket error:", error);
+    });
+}
+
+function updateSonarData(angle, newData) {
+    const lineIndex = angle;
+    const start = lineIndex * LINE_LENGTH;
+    intensityData.set(newData, start);
+    currentAngle = angle;
+    updateTexture();
+    render();
+}
+
+// Animation loop
+function animate() {
+    render();
+    requestAnimationFrame(animate);
+}
+
+function fakeWebSocket() {
+  setInterval(() => {
+    const angle = (last_angle + 1) % 400;
+    last_angle = angle;
+    const newData = new Uint8Array(LINE_LENGTH);
+    for (let i = 0; i < LINE_LENGTH; i++) {
+      newData[i] = 0;
+    }
+    newData[angle*3] = 255;
+    newData[angle*3+1] = 255;
+    newData[angle*3+2] = 255;
+    newData[angle*3+3] = 255;
+    newData[angle*3+4] = 255;
+    newData[angle*3+5] = 255;
+    newData[angle*3+6] = 255;
+    newData[angle*3+7] = 255;
+    newData[angle*3+8] = 255;
+    newData[angle*3+9] = 255;
+    newData[angle*3+10] = 255;
+    updateSonarData(angle, newData);
+  }, 20);
+}
+// Start the animation
+animate();
+
+</script><canvas width="800" height="800"></canvas>
+
+</body></html>

@@ -1,5 +1,6 @@
 use bluerobotics_ping::device::PingDevice;
 use paperclip::actix::Apiv2Schema;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, trace, warn};
@@ -269,6 +270,7 @@ pub enum UpgradeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub enum PingRequest {
     Ping1D(Ping1DRequest),
     Ping360(Ping360Request),
@@ -279,6 +281,7 @@ pub enum PingRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub enum Ping1DRequest {
     DeviceID,
     ModeAuto,
@@ -297,33 +300,49 @@ pub enum Ping1DRequest {
     GainSetting,
     PingEnable,
     DistanceSimple,
+ #[schemars(skip)]
     SetDeviceId(bluerobotics_ping::ping1d::SetDeviceIdStruct),
+ #[schemars(skip)]
     SetModeAuto(bluerobotics_ping::ping1d::SetModeAutoStruct),
+ #[schemars(skip)]
     SetPingInterval(bluerobotics_ping::ping1d::SetPingIntervalStruct),
+ #[schemars(skip)]
     SetPingEnable(bluerobotics_ping::ping1d::SetPingEnableStruct),
+ #[schemars(skip)]
     SetSpeedOfSound(bluerobotics_ping::ping1d::SetSpeedOfSoundStruct),
+ #[schemars(skip)]
     SetRange(bluerobotics_ping::ping1d::SetRangeStruct),
+ #[schemars(skip)]
     SetGainSetting(bluerobotics_ping::ping1d::SetGainSettingStruct),
+ #[schemars(skip)]
     ContinuousStart(bluerobotics_ping::ping1d::ContinuousStartStruct),
+ #[schemars(skip)]
     ContinuousStop(bluerobotics_ping::ping1d::ContinuousStopStruct),
     GotoBootloader,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub enum Ping360Request {
     MotorOff,
     DeviceData,
     AutoDeviceData,
+ #[schemars(skip)]
     SetDeviceId(bluerobotics_ping::ping360::SetDeviceIdStruct),
+ #[schemars(skip)]
     Transducer(bluerobotics_ping::ping360::TransducerStruct),
+ #[schemars(skip)]
     Reset(bluerobotics_ping::ping360::ResetStruct),
+ #[schemars(skip)]
     AutoTransmit(bluerobotics_ping::ping360::AutoTransmitStruct),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
+#[derive(JsonSchema)]
 pub enum PingCommonRequest {
     DeviceInformation,
     ProtocolVersion,
+    #[schemars(skip)]
     SetDeviceId(bluerobotics_ping::common::SetDeviceIdStruct),
 }
 
