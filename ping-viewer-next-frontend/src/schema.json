@@ -1,0 +1,393 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ModuleType",
+    "oneOf": [
+      {
+        "type": "object",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "AutoCreate"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "Create"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/CreateStruct"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "Delete"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/UuidWrapper"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "List"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "Info"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/UuidWrapper"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "Search"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "Ping"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/DeviceRequestStruct"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "GetDeviceHandler"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/UuidWrapper"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "EnableContinuousMode"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/UuidWrapper"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "command",
+              "payload"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": [
+                  "DisableContinuousMode"
+                ]
+              },
+              "payload": {
+                "$ref": "#/definitions/UuidWrapper"
+              }
+            }
+          }
+        ],
+        "required": [
+          "module"
+        ],
+        "properties": {
+          "module": {
+            "type": "string",
+            "enum": [
+              "DeviceManager"
+            ]
+          }
+        }
+      }
+    ],
+    "definitions": {
+      "CreateStruct": {
+        "type": "object",
+        "required": [
+          "device_selection",
+          "source"
+        ],
+        "properties": {
+          "device_selection": {
+            "$ref": "#/definitions/DeviceSelection"
+          },
+          "source": {
+            "$ref": "#/definitions/SourceSelection"
+          }
+        }
+      },
+      "DeviceRequestStruct": {
+        "type": "object",
+        "required": [
+          "device_request",
+          "uuid"
+        ],
+        "properties": {
+          "device_request": {
+            "$ref": "#/definitions/PingRequest"
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "DeviceSelection": {
+        "type": "string",
+        "enum": [
+          "Common",
+          "Ping1D",
+          "Ping360",
+          "Auto"
+        ]
+      },
+      "Ping1DRequest": {
+        "type": "string",
+        "enum": [
+          "DeviceID",
+          "ModeAuto",
+          "Distance",
+          "Profile",
+          "SpeedOfSound",
+          "Voltage5",
+          "DeviceId",
+          "FirmwareVersion",
+          "Range",
+          "TransmitDuration",
+          "PingInterval",
+          "ProcessorTemperature",
+          "PcbTemperature",
+          "GeneralInfo",
+          "GainSetting",
+          "PingEnable",
+          "DistanceSimple",
+          "GotoBootloader"
+        ]
+      },
+      "Ping360Request": {
+        "type": "string",
+        "enum": [
+          "MotorOff",
+          "DeviceData",
+          "AutoDeviceData"
+        ]
+      },
+      "PingCommonRequest": {
+        "type": "string",
+        "enum": [
+          "DeviceInformation",
+          "ProtocolVersion"
+        ]
+      },
+      "PingRequest": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "GetSubscriber",
+              "Upgrade",
+              "Stop"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "Ping1D"
+            ],
+            "properties": {
+              "Ping1D": {
+                "$ref": "#/definitions/Ping1DRequest"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "Ping360"
+            ],
+            "properties": {
+              "Ping360": {
+                "$ref": "#/definitions/Ping360Request"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "Common"
+            ],
+            "properties": {
+              "Common": {
+                "$ref": "#/definitions/PingCommonRequest"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SourceSelection": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "UdpStream"
+            ],
+            "properties": {
+              "UdpStream": {
+                "$ref": "#/definitions/SourceUdpStruct"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "SerialStream"
+            ],
+            "properties": {
+              "SerialStream": {
+                "$ref": "#/definitions/SourceSerialStruct"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SourceSerialStruct": {
+        "type": "object",
+        "required": [
+          "baudrate",
+          "path"
+        ],
+        "properties": {
+          "baudrate": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "SourceUdpStruct": {
+        "type": "object",
+        "required": [
+          "ip",
+          "port"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string",
+            "format": "ipv4"
+          },
+          "port": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        }
+      },
+      "UuidWrapper": {
+        "type": "object",
+        "required": [
+          "uuid"
+        ],
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  }
