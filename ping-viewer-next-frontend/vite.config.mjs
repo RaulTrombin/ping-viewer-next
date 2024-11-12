@@ -1,21 +1,26 @@
+import { URL, fileURLToPath } from "node:url";
 import Vue from "@vitejs/plugin-vue";
-// Plugins
+import autoprefixer from "autoprefixer";
+import tailwindcss from "tailwindcss";
 import AutoImport from "unplugin-auto-import/vite";
 import Fonts from "unplugin-fonts/vite";
 import Components from "unplugin-vue-components/vite";
 import VueRouter from "unplugin-vue-router/vite";
+import { defineConfig } from "vite";
 import Layouts from "vite-plugin-vue-layouts";
 import Vuetify, { transformAssetUrls } from "vite-plugin-vuetify";
 
-import autoprefixer from "autoprefixer";
-// Tailwind
-import tailwindcss from "tailwindcss";
+const removeMdiPreload = {
+	name: "remove-eot-preload",
+	order: "post",
+	transformIndexHtml: {
+		order: "post",
+		handler(html) {
+			return html.replace(/<link[^>]*?materialdesignicons[^>]*?>/g, "");
+		},
+	},
+};
 
-import { URL, fileURLToPath } from "node:url";
-// Utilities
-import { defineConfig } from "vite";
-
-// https://vitejs.dev/config/
 export default defineConfig({
 	plugins: [
 		VueRouter(),
@@ -23,7 +28,6 @@ export default defineConfig({
 		Vue({
 			template: { transformAssetUrls },
 		}),
-		// https://github.com/vuetifyjs/vuetify-loader/tree/master/packages/vite-plugin#readme
 		Vuetify({
 			autoImport: true,
 			styles: {
@@ -48,6 +52,7 @@ export default defineConfig({
 			},
 			vueTemplate: true,
 		}),
+		removeMdiPreload,
 	],
 	define: { "process.env": {} },
 	resolve: {
@@ -65,6 +70,13 @@ export default defineConfig({
 	css: {
 		postcss: {
 			plugins: [tailwindcss, autoprefixer],
+		},
+	},
+	build: {
+		rollupOptions: {
+			output: {
+				assetFileNames: "assets/[name][extname]",
+			},
 		},
 	},
 });
