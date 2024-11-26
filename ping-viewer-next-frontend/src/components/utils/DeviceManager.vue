@@ -331,17 +331,17 @@ const createDevice = async () => {
 		const source =
 			newDevice.value.connectionType === "UdpStream"
 				? {
-					UdpStream: {
-						ip: newDevice.value.udp.ip,
-						port: newDevice.value.udp.port,
-					},
-				}
+						UdpStream: {
+							ip: newDevice.value.udp.ip,
+							port: newDevice.value.udp.port,
+						},
+					}
 				: {
-					SerialStream: {
-						path: newDevice.value.serial.path,
-						baudrate: newDevice.value.serial.baudrate,
-					},
-				};
+						SerialStream: {
+							path: newDevice.value.serial.path,
+							baudrate: newDevice.value.serial.baudrate,
+						},
+					};
 
 		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
 			method: "POST",
