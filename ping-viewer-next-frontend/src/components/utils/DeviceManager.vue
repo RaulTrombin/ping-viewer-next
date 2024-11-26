@@ -1,167 +1,202 @@
 <template>
-  <v-card flat>
-    <v-card-text>
-      <div class="d-flex justify-space-between align-center mb-6">
-        <h2 class="text-xl">Device Management</h2>
-        <div class="d-flex gap-4">
-          <v-btn color="primary" @click="showCreateDialog = true">
-            <v-icon start>mdi-plus</v-icon>
-            Create Device
-          </v-btn>
-          <v-btn color="primary" :loading="isAutoCreating" @click="autoCreateDevices">
-            <v-icon start>mdi-plus-network</v-icon>
-            Auto Create
-          </v-btn>
-          <v-btn :loading="isRefreshing" @click="refreshDevices">
-            <v-icon start>mdi-refresh</v-icon>
-            Refresh
-          </v-btn>
-        </div>
-      </div>
+	<v-card flat>
+		<v-card-text>
+			<!-- Desktop view -->
+			<div class="d-none d-md-flex justify-space-between align-center mb-6">
+				<h2 class="text-xl">Device Management</h2>
+				<div class="d-flex gap-4">
+					<v-btn color="primary" @click="showCreateDialog = true">
+						<v-icon start>mdi-plus</v-icon>
+						Create Device
+					</v-btn>
+					<v-btn color="primary" :loading="isAutoCreating" @click="autoCreateDevices">
+						<v-icon start>mdi-plus-network</v-icon>
+						Auto Create
+					</v-btn>
+					<v-btn :loading="isRefreshing" @click="refreshDevices">
+						<v-icon start>mdi-refresh</v-icon>
+						Refresh
+					</v-btn>
+				</div>
+			</div>
+
+			<!-- Mobile view -->
+			<div class="d-md-none mb-6">
+				<div class="d-flex justify-space-between align-center">
+					<h2 class="text-xl">Device Management</h2>
+					<v-menu>
+						<template v-slot:activator="{ props }">
+							<v-btn v-bind="props" icon>
+								<v-icon>mdi-menu</v-icon>
+							</v-btn>
+						</template>
+						<v-list>
+							<v-list-item @click="showCreateDialog = true">
+								<template v-slot:prepend>
+									<v-icon>mdi-plus</v-icon>
+								</template>
+								Create Device
+							</v-list-item>
+							<v-list-item @click="autoCreateDevices" :disabled="isAutoCreating">
+								<template v-slot:prepend>
+									<v-icon>mdi-plus-network</v-icon>
+								</template>
+								{{ isAutoCreating ? 'Creating...' : 'Auto Create' }}
+							</v-list-item>
+							<v-list-item @click="refreshDevices" :disabled="isRefreshing">
+								<template v-slot:prepend>
+									<v-icon>mdi-refresh</v-icon>
+								</template>
+								{{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+							</v-list-item>
+						</v-list>
+					</v-menu>
+				</div>
+			</div>
 
 
-      <div v-if="isLoading" class="d-flex justify-center my-4">
-        <v-progress-circular indeterminate />
-      </div>
+			<div v-if="isLoading" class="d-flex justify-center my-4">
+				<v-progress-circular indeterminate />
+			</div>
 
-      <div v-else>
-        <v-table>
-          <thead>
-            <tr>
-              <th class="text-left">Device Type</th>
-              <th class="text-left">ID</th>
-              <th class="text-left">Status</th>
-              <th class="text-left">Connection</th>
-              <th class="text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="device in devices" :key="device.id">
-              <td>
-                <div class="d-flex align-center">
-                  <v-icon :icon="device.device_type === 'Ping360' ? 'mdi-radar' : 'mdi-altimeter'"
-                    class="mr-2" />
-                  {{ device.device_type }}
-                </div>
-              </td>
-              <td class="text-truncate" style="max-width: 200px;" :title="device.id">
-                {{ device.id }}
-              </td>
-              <td>
-                <v-chip :color="getStatusColor(device.status)" size="small">
-                  {{ device.status }}
-                </v-chip>
-              </td>
-              <td>
-                <div v-if="device.source.SerialStream">
-                  <v-tooltip location="bottom">
-                    <template v-slot:activator="{ props }">
-                      <div v-bind="props" class="d-flex align-center">
-                        <v-icon start size="small">mdi-usb-port</v-icon>
-                        <span class="ml-1">{{ device.source.SerialStream.path }}</span>
-                      </div>
-                    </template>
-                    Baudrate: {{ device.source.SerialStream.baudrate }}
-                  </v-tooltip>
-                </div>
-                <div v-else-if="device.source.UdpStream">
-                  <v-tooltip location="bottom">
-                    <template v-slot:activator="{ props }">
-                      <div v-bind="props" class="d-flex align-center">
-                        <v-icon start size="small">mdi-ip-network</v-icon>
-                        <span class="ml-1">{{ device.source.UdpStream.ip }}</span>
-                      </div>
-                    </template>
-                    Port: {{ device.source.UdpStream.port }}
-                  </v-tooltip>
-                </div>
-              </td>
-              <td class="text-center">
-                <div class="d-flex justify-center gap-2">
-                  <v-btn color="primary" size="small" @click="openDevice(device)">
-                    <v-icon start>mdi-open-in-new</v-icon>
-                    Open
-                  </v-btn>
-                  <v-btn v-if="device.status === 'ContinuousMode'" color="warning" size="small"
-                    @click="disableContinuousMode(device.id)" :loading="loadingStates[device.id]">
-                    <v-icon start>mdi-pause</v-icon>
-                    Disable
-                  </v-btn>
-                  <v-btn v-else color="success" size="small" @click="enableContinuousMode(device.id)"
-                    :loading="loadingStates[device.id]">
-                    <v-icon start>mdi-play</v-icon>
-                    Enable
-                  </v-btn>
-                  <v-btn color="error" size="small" @click="confirmDelete(device)"
-                    :loading="loadingStates[device.id]">
-                    <v-icon>mdi-delete</v-icon>
-                  </v-btn>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="devices.length === 0">
-              <td colspan="5" class="text-center py-4">
-                No devices found. Try clicking "Auto Create" to discover devices.
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
-      </div>
+			<div v-else>
+				<v-table>
+					<thead>
+						<tr>
+							<th class="text-left">Device Type</th>
+							<th class="text-left">ID</th>
+							<th class="text-left">Status</th>
+							<th class="text-left">Connection</th>
+							<th class="text-center">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="device in devices" :key="device.id">
+							<td>
+								<div class="d-flex align-center">
+									<v-icon :icon="device.device_type === 'Ping360' ? 'mdi-radar' : 'mdi-altimeter'"
+										class="mr-2" />
+									{{ device.device_type }}
+								</div>
+							</td>
+							<td class="text-truncate" style="max-width: 200px;" :title="device.id">
+								{{ device.id }}
+							</td>
+							<td>
+								<v-chip :color="getStatusColor(device.status)" size="small">
+									{{ device.status }}
+								</v-chip>
+							</td>
+							<td>
+								<div v-if="device.source.SerialStream">
+									<v-tooltip location="bottom">
+										<template v-slot:activator="{ props }">
+											<div v-bind="props" class="d-flex align-center">
+												<v-icon start size="small">mdi-usb-port</v-icon>
+												<span class="ml-1">{{ device.source.SerialStream.path }}</span>
+											</div>
+										</template>
+										Baudrate: {{ device.source.SerialStream.baudrate }}
+									</v-tooltip>
+								</div>
+								<div v-else-if="device.source.UdpStream">
+									<v-tooltip location="bottom">
+										<template v-slot:activator="{ props }">
+											<div v-bind="props" class="d-flex align-center">
+												<v-icon start size="small">mdi-ip-network</v-icon>
+												<span class="ml-1">{{ device.source.UdpStream.ip }}</span>
+											</div>
+										</template>
+										Port: {{ device.source.UdpStream.port }}
+									</v-tooltip>
+								</div>
+							</td>
+							<td class="text-center">
+								<div class="d-flex justify-center gap-2">
+									<v-btn color="primary" size="small" @click="openDevice(device)">
+										<v-icon start>mdi-open-in-new</v-icon>
+										Open
+									</v-btn>
+									<v-btn v-if="device.status === 'ContinuousMode'" color="warning" size="small"
+										@click="disableContinuousMode(device.id)" :loading="loadingStates[device.id]">
+										<v-icon start>mdi-pause</v-icon>
+										Disable
+									</v-btn>
+									<v-btn v-else color="success" size="small" @click="enableContinuousMode(device.id)"
+										:loading="loadingStates[device.id]">
+										<v-icon start>mdi-play</v-icon>
+										Enable
+									</v-btn>
+									<v-btn color="error" size="small" @click="confirmDelete(device)"
+										:loading="loadingStates[device.id]">
+										<v-icon>mdi-delete</v-icon>
+									</v-btn>
+								</div>
+							</td>
+						</tr>
+						<tr v-if="devices.length === 0">
+							<td colspan="5" class="text-center py-4">
+								No devices found. Try clicking "Auto Create" to discover devices.
+							</td>
+						</tr>
+					</tbody>
+				</v-table>
+			</div>
 
-      <v-dialog v-model="showCreateDialog" max-width="500px">
-        <v-card>
-          <v-card-title>Create New Device</v-card-title>
-          <v-card-text>
-            <v-form @submit.prevent="createDevice">
-              <v-select v-model="newDevice.device_selection" :items="deviceTypes" label="Device Type"
-                class="mb-4" />
+			<v-dialog v-model="showCreateDialog" max-width="500px">
+				<v-card>
+					<v-card-title>Create New Device</v-card-title>
+					<v-card-text>
+						<v-form @submit.prevent="createDevice">
+							<v-select v-model="newDevice.device_selection" :items="deviceTypes" label="Device Type"
+								class="mb-4" />
 
-              <v-select v-model="newDevice.connectionType" :items="connectionTypes" label="Connection Type"
-                class="mb-4" />
+							<v-select v-model="newDevice.connectionType" :items="connectionTypes"
+								label="Connection Type" class="mb-4" />
 
-              <template v-if="newDevice.connectionType === 'UdpStream'">
-                <v-text-field v-model="newDevice.udp.ip" label="IP Address" class="mb-4"
-                  :rules="[v => !!v || 'IP is required']" />
-                <v-text-field v-model.number="newDevice.udp.port" type="number" label="Port"
-                  class="mb-4" :rules="[v => !!v || 'Port is required']" />
-              </template>
+							<template v-if="newDevice.connectionType === 'UdpStream'">
+								<v-text-field v-model="newDevice.udp.ip" label="IP Address" class="mb-4"
+									:rules="[v => !!v || 'IP is required']" />
+								<v-text-field v-model.number="newDevice.udp.port" type="number" label="Port"
+									class="mb-4" :rules="[v => !!v || 'Port is required']" />
+							</template>
 
-              <template v-else-if="newDevice.connectionType === 'SerialStream'">
-                <v-text-field v-model="newDevice.serial.path" label="Serial Path" class="mb-4"
-                  :rules="[v => !!v || 'Path is required']" />
-                <v-text-field v-model.number="newDevice.serial.baudrate" type="number" label="Baudrate"
-                  class="mb-4" :rules="[v => !!v || 'Baudrate is required']" />
-              </template>
-            </v-form>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn color="error" variant="text" @click="showCreateDialog = false">Cancel</v-btn>
-            <v-btn color="success" :loading="isCreating" @click="createDevice">Create</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+							<template v-else-if="newDevice.connectionType === 'SerialStream'">
+								<v-text-field v-model="newDevice.serial.path" label="Serial Path" class="mb-4"
+									:rules="[v => !!v || 'Path is required']" />
+								<v-text-field v-model.number="newDevice.serial.baudrate" type="number" label="Baudrate"
+									class="mb-4" :rules="[v => !!v || 'Baudrate is required']" />
+							</template>
+						</v-form>
+					</v-card-text>
+					<v-card-actions>
+						<v-spacer />
+						<v-btn color="error" variant="text" @click="showCreateDialog = false">Cancel</v-btn>
+						<v-btn color="success" :loading="isCreating" @click="createDevice">Create</v-btn>
+					</v-card-actions>
+				</v-card>
+			</v-dialog>
 
-      <v-dialog v-model="showDeleteDialog" max-width="400px">
-        <v-card>
-          <v-card-title>Confirm Delete</v-card-title>
-          <v-card-text>
-            Are you sure you want to delete this device?
-            <div class="mt-2">
-              <strong>Type:</strong> {{ deviceToDelete?.device_type }}<br>
-              <strong>ID:</strong> {{ deviceToDelete?.id }}
-            </div>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn color="primary" variant="text" @click="showDeleteDialog = false">Cancel</v-btn>
-            <v-btn color="error" :loading="isDeleting" @click="deleteDevice">Delete</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+			<v-dialog v-model="showDeleteDialog" max-width="400px">
+				<v-card>
+					<v-card-title>Confirm Delete</v-card-title>
+					<v-card-text>
+						Are you sure you want to delete this device?
+						<div class="mt-2">
+							<strong>Type:</strong> {{ deviceToDelete?.device_type }}<br>
+							<strong>ID:</strong> {{ deviceToDelete?.id }}
+						</div>
+					</v-card-text>
+					<v-card-actions>
+						<v-spacer />
+						<v-btn color="primary" variant="text" @click="showDeleteDialog = false">Cancel</v-btn>
+						<v-btn color="error" :loading="isDeleting" @click="deleteDevice">Delete</v-btn>
+					</v-card-actions>
+				</v-card>
+			</v-dialog>
 
-    </v-card-text>
-  </v-card>
+		</v-card-text>
+	</v-card>
 </template>
 
 <script setup>
@@ -296,17 +331,17 @@ const createDevice = async () => {
 		const source =
 			newDevice.value.connectionType === "UdpStream"
 				? {
-						UdpStream: {
-							ip: newDevice.value.udp.ip,
-							port: newDevice.value.udp.port,
-						},
-					}
+					UdpStream: {
+						ip: newDevice.value.udp.ip,
+						port: newDevice.value.udp.port,
+					},
+				}
 				: {
-						SerialStream: {
-							path: newDevice.value.serial.path,
-							baudrate: newDevice.value.serial.baudrate,
-						},
-					};
+					SerialStream: {
+						path: newDevice.value.serial.path,
+						baudrate: newDevice.value.serial.baudrate,
+					},
+				};
 
 		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
 			method: "POST",
@@ -449,43 +484,43 @@ onUnmounted(() => {
 
 <style scoped>
 .v-card-text {
-  padding-top: 0;
+	padding-top: 0;
 }
 
 .v-table {
-  background: transparent !important;
+	background: transparent !important;
 }
 
 :deep(.v-table .v-table__wrapper > table > thead > tr > th) {
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  font-weight: 600;
+	color: rgba(var(--v-theme-on-surface), 0.7);
+	font-weight: 600;
 }
 
 .device-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
+	display: flex;
+	gap: 8px;
+	justify-content: center;
 }
 
 .status-chip {
-  min-width: 100px;
-  justify-content: center;
+	min-width: 100px;
+	justify-content: center;
 }
 
 .truncate-id {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .connection-info {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
 }
 
 :deep(.v-btn--size-small) {
-  min-width: 36px;
+	min-width: 36px;
 }
 </style>
