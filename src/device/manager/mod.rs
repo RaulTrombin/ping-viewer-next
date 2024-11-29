@@ -782,6 +782,45 @@ impl DeviceManager {
         ))
     }
 
+    pub async fn update_ping360_config(
+        &self,
+        device_id: Uuid,
+        new_config: Ping360Config,
+    ) -> Result<(), ManagerError> {
+        let device = self.get_device(device_id)?;
+        if let Some(DeviceCache::Ping360(cache)) = &device.cache {
+            let mut config = cache
+                .continuous_mode_settings
+                .write()
+                .map_err(|err| ManagerError::Other(err.to_string()))?;
+            *config = new_config;
+            return Ok(());
+        }
+        Err(ManagerError::DeviceSourceError(
+            "set_ping360_config: Can't set Ping360Config".to_string(),
+        ))
+    }
+
+    pub async fn get_ping360_config(&self, device_id: Uuid) -> Result<Answer, ManagerError> {
+        let device = self.get_device(device_id)?;
+        if let Some(DeviceCache::Ping360(cache)) = &device.cache {
+            return Ok(Answer::DeviceConfig(ModifyDeviceResult::Ping360Config(
+                cache
+                    .continuous_mode_settings
+                    .read()
+                    .map_err(|err| {
+                        ManagerError::Other(format!(
+                            "get_ping360_config: {err}, device: {device_id}"
+                        ))
+                    })?
+                    .clone(),
+            )));
+        }
+        Err(ManagerError::DeviceSourceError(
+            "get_ping360_config: Can't return Ping360Config".to_string(),
+        ))
+    }
+
     pub async fn modify_device(&mut self, request: ModifyDevice) -> Result<Answer, ManagerError> {
         match request.modify {
             ModifyDeviceCommand::SetIp(ip) => {
