@@ -76,189 +76,186 @@
   </template>
 
   <script setup>
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 const currentStep = ref(1);
 const loading = ref(false);
 const error = ref(null);
 const serverInfo = ref(null);
-const remoteAddress = ref("");
+const remoteAddress = ref('');
 const lastUsedServer = ref(null);
 const autoConfirmCountdown = ref(0);
 let countdownTimer = null;
 
-const emit = defineEmits(["serverConnected"]);
+const emit = defineEmits(['serverConnected']);
 
-const CACHE_KEY = "pingviewer-server";
+const CACHE_KEY = 'pingviewer-server';
 
 const getStepText = (step) => {
-	switch (step) {
-		case 1:
-			return "Checking last used server...";
-		case 2:
-			return "Checking local server...";
-		case 3:
-			return "Checking default remote server...";
-		case 4:
-			return "Manual server configuration";
-		default:
-			return "";
-	}
+  switch (step) {
+    case 1:
+      return 'Checking last used server...';
+    case 2:
+      return 'Checking local server...';
+    case 3:
+      return 'Checking default remote server...';
+    case 4:
+      return 'Manual server configuration';
+    default:
+      return '';
+  }
 };
 
 const loadLastUsedServer = () => {
-	try {
-		const cached = localStorage.getItem(CACHE_KEY);
-		if (cached) {
-			const data = JSON.parse(cached);
-			if (data.timestamp && Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
-				lastUsedServer.value = data.address;
-				remoteAddress.value = data.address;
-				return data.address;
-			}
-		}
-	} catch (e) {
-		console.error("Error loading cached server:", e);
-	}
-	return null;
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (data.timestamp && Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+        lastUsedServer.value = data.address;
+        remoteAddress.value = data.address;
+        return data.address;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading cached server:', e);
+  }
+  return null;
 };
 
 const saveLastUsedServer = (address) => {
-	try {
-		const data = {
-			address,
-			timestamp: Date.now(),
-		};
-		localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-	} catch (e) {
-		console.error("Error saving server to cache:", e);
-	}
+  try {
+    const data = {
+      address,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Error saving server to cache:', e);
+  }
 };
 
 const startAutoConfirmCountdown = () => {
-	stopAutoConfirmCountdown();
-	autoConfirmCountdown.value = 5;
-	countdownTimer = setInterval(() => {
-		if (autoConfirmCountdown.value <= 1) {
-			stopAutoConfirmCountdown();
-			confirmConnection();
-		} else {
-			autoConfirmCountdown.value--;
-		}
-	}, 1000);
+  stopAutoConfirmCountdown();
+  autoConfirmCountdown.value = 5;
+  countdownTimer = setInterval(() => {
+    if (autoConfirmCountdown.value <= 1) {
+      stopAutoConfirmCountdown();
+      confirmConnection();
+    } else {
+      autoConfirmCountdown.value--;
+    }
+  }, 1000);
 };
 
 const stopAutoConfirmCountdown = () => {
-	if (countdownTimer) {
-		clearInterval(countdownTimer);
-		countdownTimer = null;
-	}
-	autoConfirmCountdown.value = 0;
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+  autoConfirmCountdown.value = 0;
 };
 
 const editServer = () => {
-	stopAutoConfirmCountdown();
-	serverInfo.value = null;
-	currentStep.value = 4;
+  stopAutoConfirmCountdown();
+  serverInfo.value = null;
+  currentStep.value = 4;
 };
 
 const tryConnect = async (url) => {
-	loading.value = true;
-	error.value = null;
-	try {
-		const response = await fetch(url, {
-			mode: "cors",
-			headers: {
-				Accept: "application/json",
-			},
-		});
-		if (response.ok) {
-			const contentType = response.headers.get("content-type");
-			if (contentType?.includes("application/json")) {
-				const data = await response.json();
-				serverInfo.value = data;
-				loading.value = false;
+  loading.value = true;
+  error.value = null;
+  try {
+    const response = await fetch(url, {
+      mode: 'cors',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const data = await response.json();
+        serverInfo.value = data;
+        loading.value = false;
 
-				startAutoConfirmCountdown();
-				return true;
-			}
-			throw new Error("Invalid response format");
-		}
-	} catch (err) {
-		console.error(`Error connecting to ${url}:`, err);
-		error.value = err.message;
-	}
-	loading.value = false;
-	return false;
+        startAutoConfirmCountdown();
+        return true;
+      }
+      throw new Error('Invalid response format');
+    }
+  } catch (err) {
+    console.error(`Error connecting to ${url}:`, err);
+    error.value = err.message;
+  }
+  loading.value = false;
+  return false;
 };
 
 const proceedToNextStep = () => {
-	currentStep.value++;
-	error.value = null;
+  currentStep.value++;
+  error.value = null;
 };
 
 onMounted(async () => {
-	// Step 1: Try last used server
-	const lastServer = loadLastUsedServer();
-	if (lastServer) {
-		if (await tryConnect(`http://${lastServer}/register_service`)) {
-			return;
-		}
-	}
-	proceedToNextStep();
+  // Step 1: Try last used server
+  const lastServer = loadLastUsedServer();
+  if (lastServer) {
+    if (await tryConnect(`http://${lastServer}/register_service`)) {
+      return;
+    }
+  }
+  proceedToNextStep();
 
-	// Step 2: Try local server
-	if (await tryConnect(`http://${window.location.host}/register_service`)) {
-		remoteAddress.value = window.location.host;
-		return;
-	}
-	proceedToNextStep();
+  // Step 2: Try local server
+  if (await tryConnect(`http://${window.location.host}/register_service`)) {
+    remoteAddress.value = window.location.host;
+    return;
+  }
+  proceedToNextStep();
 
-	// Step 3: Try default remote server
-	const defaultServer = "pingviewernext:8080";
-	if (await tryConnect(`http://${defaultServer}/register_service`)) {
-		remoteAddress.value = defaultServer;
-		return;
-	}
-	proceedToNextStep();
+  // Step 3: Try default remote server
+  const defaultServer = 'pingviewernext:8080';
+  if (await tryConnect(`http://${defaultServer}/register_service`)) {
+    remoteAddress.value = defaultServer;
+    return;
+  }
+  proceedToNextStep();
 
-	error.value =
-		"Could not connect to any known servers. Please enter a custom address.";
+  error.value = 'Could not connect to any known servers. Please enter a custom address.';
 });
 
 const connectToRemote = async () => {
-	if (!remoteAddress.value) {
-		error.value = "Please enter a remote server address.";
-		return;
-	}
+  if (!remoteAddress.value) {
+    error.value = 'Please enter a remote server address.';
+    return;
+  }
 
-	const success = await tryConnect(
-		`http://${remoteAddress.value}/register_service`,
-	);
+  const success = await tryConnect(`http://${remoteAddress.value}/register_service`);
 
-	if (!success) {
-		error.value = "Could not connect to the specified remote server.";
-		return;
-	}
+  if (!success) {
+    error.value = 'Could not connect to the specified remote server.';
+    return;
+  }
 
-	saveLastUsedServer(remoteAddress.value);
+  saveLastUsedServer(remoteAddress.value);
 };
 
 const confirmConnection = () => {
-	stopAutoConfirmCountdown();
-	const url = `http://${remoteAddress.value}`;
-	saveLastUsedServer(remoteAddress.value);
-	emit("serverConnected", url);
+  stopAutoConfirmCountdown();
+  const url = `http://${remoteAddress.value}`;
+  saveLastUsedServer(remoteAddress.value);
+  emit('serverConnected', url);
 };
 
 // Watch for changes to serverInfo to handle cleanup
 watch(serverInfo, (newValue, oldValue) => {
-	if (!newValue && oldValue) {
-		stopAutoConfirmCountdown();
-	}
+  if (!newValue && oldValue) {
+    stopAutoConfirmCountdown();
+  }
 });
 
 onUnmounted(() => {
-	stopAutoConfirmCountdown();
+  stopAutoConfirmCountdown();
 });
 </script>

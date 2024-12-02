@@ -52,76 +52,76 @@
   </template>
 
   <script setup>
-import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 
-const yawAngle = inject("yawAngle");
-const yawConnectionStatus = inject("yawConnectionStatus");
-const connectYawWebSocket = inject("connectYawWebSocket");
-const cleanupYawConnection = inject("cleanupYawConnection");
+const yawAngle = inject('yawAngle');
+const yawConnectionStatus = inject('yawConnectionStatus');
+const connectYawWebSocket = inject('connectYawWebSocket');
+const cleanupYawConnection = inject('cleanupYawConnection');
 
 const localWebsocketUrl = ref(
-	localStorage.getItem("yawWebsocketUrl") ||
-		`${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:6040/ws/mavlink?filter=ATTITUDE`,
+  localStorage.getItem('yawWebsocketUrl') ||
+    `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:6040/ws/mavlink?filter=ATTITUDE`
 );
-const connectionError = ref("");
+const connectionError = ref('');
 const updateCount = ref(0);
 const updateRate = ref(0);
 const lastMessageTimestamp = ref(Date.now());
 let updateRateInterval = null;
 
-const isConnected = computed(() => yawConnectionStatus.value === "Connected");
+const isConnected = computed(() => yawConnectionStatus.value === 'Connected');
 
 const statusIndicatorClass = computed(() => {
-	return {
-		"bg-green-500": yawConnectionStatus.value === "Connected",
-		"bg-red-500": yawConnectionStatus.value === "Disconnected",
-	};
+  return {
+    'bg-green-500': yawConnectionStatus.value === 'Connected',
+    'bg-red-500': yawConnectionStatus.value === 'Disconnected',
+  };
 });
 
 const lastUpdateTime = computed(() => {
-	const timeDiff = Date.now() - lastMessageTimestamp.value;
-	if (timeDiff < 1000) return "Just now";
-	if (timeDiff < 60000) return `${Math.floor(timeDiff / 1000)}s ago`;
-	return `${Math.floor(timeDiff / 60000)}m ago`;
+  const timeDiff = Date.now() - lastMessageTimestamp.value;
+  if (timeDiff < 1000) return 'Just now';
+  if (timeDiff < 60000) return `${Math.floor(timeDiff / 1000)}s ago`;
+  return `${Math.floor(timeDiff / 60000)}m ago`;
 });
 
 const toggleConnection = () => {
-	if (isConnected.value) {
-		cleanupYawConnection();
-		connectionError.value = "";
-	} else {
-		localStorage.setItem("yawWebsocketUrl", localWebsocketUrl.value);
-		connectYawWebSocket(localWebsocketUrl.value);
-	}
+  if (isConnected.value) {
+    cleanupYawConnection();
+    connectionError.value = '';
+  } else {
+    localStorage.setItem('yawWebsocketUrl', localWebsocketUrl.value);
+    connectYawWebSocket(localWebsocketUrl.value);
+  }
 };
 
 const resetYaw = () => {
-	yawAngle.value = 0;
+  yawAngle.value = 0;
 };
 
 const startUpdateRateCalculator = () => {
-	updateRateInterval = setInterval(() => {
-		updateRate.value = updateCount.value;
-		updateCount.value = 0;
-	}, 1000);
+  updateRateInterval = setInterval(() => {
+    updateRate.value = updateCount.value;
+    updateCount.value = 0;
+  }, 1000);
 };
 
 watch(yawAngle, () => {
-	updateCount.value++;
-	lastMessageTimestamp.value = Date.now();
+  updateCount.value++;
+  lastMessageTimestamp.value = Date.now();
 });
 
 watch(localWebsocketUrl, () => {
-	connectionError.value = "";
+  connectionError.value = '';
 });
 
 onMounted(() => {
-	startUpdateRateCalculator();
+  startUpdateRateCalculator();
 });
 
 onUnmounted(() => {
-	if (updateRateInterval) {
-		clearInterval(updateRateInterval);
-	}
+  if (updateRateInterval) {
+    clearInterval(updateRateInterval);
+  }
 });
 </script>

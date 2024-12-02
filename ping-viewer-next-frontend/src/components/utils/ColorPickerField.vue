@@ -51,60 +51,60 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
-	modelValue: {
-		type: String,
-		required: true,
-	},
-	label: {
-		type: String,
-		required: true,
-	},
-	defaultValue: {
-		type: String,
-		default: "#000000",
-	},
+  modelValue: {
+    type: String,
+    required: true,
+  },
+  label: {
+    type: String,
+    required: true,
+  },
+  defaultValue: {
+    type: String,
+    default: '#000000',
+  },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(['update:modelValue']);
 
 const showCanvas = ref(false);
 const showInputs = ref(false);
 const currentColor = ref(props.modelValue);
-const currentMode = ref("hex");
+const currentMode = ref('hex');
 
 const swatches = [
-	["#FF0000", "#FF4500", "#FF8C00", "#FFD700", "#FFFF00", "#9ACD32"],
-	["#00FF00", "#32CD32", "#00FA9A", "#00FFFF", "#00BFFF", "#0000FF"],
-	["#8A2BE2", "#9932CC", "#FF00FF", "#FF69B4", "#FFC0CB", "#FFFFFF"],
-	["#D3D3D3", "#A9A9A9", "#808080", "#696969", "#000000", "#8B4513"],
+  ['#FF0000', '#FF4500', '#FF8C00', '#FFD700', '#FFFF00', '#9ACD32'],
+  ['#00FF00', '#32CD32', '#00FA9A', '#00FFFF', '#00BFFF', '#0000FF'],
+  ['#8A2BE2', '#9932CC', '#FF00FF', '#FF69B4', '#FFC0CB', '#FFFFFF'],
+  ['#D3D3D3', '#A9A9A9', '#808080', '#696969', '#000000', '#8B4513'],
 ];
 
-const modes = ["hex", "hexa", "rgba", "hsla"];
+const modes = ['hex', 'hexa', 'rgba', 'hsla'];
 
 const colorPreviewStyle = computed(() => ({
-	backgroundColor: currentColor.value || props.modelValue,
-	borderColor: currentColor.value || props.modelValue,
-	width: "32px",
-	height: "32px",
+  backgroundColor: currentColor.value || props.modelValue,
+  borderColor: currentColor.value || props.modelValue,
+  width: '32px',
+  height: '32px',
 }));
 
 watch(
-	() => props.modelValue,
-	(newValue) => {
-		currentColor.value = newValue;
-	},
+  () => props.modelValue,
+  (newValue) => {
+    currentColor.value = newValue;
+  }
 );
 
 const applyColor = () => {
-	emit("update:modelValue", currentColor.value);
+  emit('update:modelValue', currentColor.value);
 };
 
 const resetColor = () => {
-	currentColor.value = props.defaultValue;
-	emit("update:modelValue", props.defaultValue);
+  currentColor.value = props.defaultValue;
+  emit('update:modelValue', props.defaultValue);
 };
 </script>
 

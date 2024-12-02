@@ -16,72 +16,72 @@
   </template>
 
   <script setup>
-import { ref } from "vue";
+import { ref } from 'vue';
 
 const props = defineProps({
-	device: {
-		type: Object,
-		required: true,
-	},
+  device: {
+    type: Object,
+    required: true,
+  },
 });
 
-const emit = defineEmits(["recording-complete"]);
+const emit = defineEmits(['recording-complete']);
 
 const isRecording = ref(false);
 const recordedData = ref([]);
 const recordingStartTime = ref(null);
 
 const toggleRecording = () => {
-	if (!isRecording.value) {
-		startRecording();
-	} else {
-		stopRecording();
-	}
+  if (!isRecording.value) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
 };
 
 const startRecording = () => {
-	isRecording.value = true;
-	recordedData.value = [];
-	recordingStartTime.value = Date.now();
+  isRecording.value = true;
+  recordedData.value = [];
+  recordingStartTime.value = Date.now();
 };
 
 const stopRecording = () => {
-	if (recordedData.value.length === 0) {
-		isRecording.value = false;
-		return;
-	}
+  if (recordedData.value.length === 0) {
+    isRecording.value = false;
+    return;
+  }
 
-	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-	const fileName = `recorded_data_${props.device.device_type}_${props.device.id}_${timestamp}.json`;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `recorded_data_${props.device.device_type}_${props.device.id}_${timestamp}.json`;
 
-	const recordingData = {
-		id: Date.now(),
-		fileName,
-		timestamp: new Date().toISOString(),
-		deviceType: props.device.device_type,
-		deviceId: props.device.id,
-		data: recordedData.value,
-		downloaded: false,
-	};
+  const recordingData = {
+    id: Date.now(),
+    fileName,
+    timestamp: new Date().toISOString(),
+    deviceType: props.device.device_type,
+    deviceId: props.device.id,
+    data: recordedData.value,
+    downloaded: false,
+  };
 
-	emit("recording-complete", recordingData);
-	isRecording.value = false;
-	recordedData.value = [];
+  emit('recording-complete', recordingData);
+  isRecording.value = false;
+  recordedData.value = [];
 };
 
 const recordData = (data) => {
-	if (isRecording.value) {
-		const frame = {
-			timestamp: new Date().toISOString(),
-			device: {
-				id: props.device.id,
-				device_type: props.device.device_type,
-				source: props.device.source,
-			},
-			data: data,
-		};
-		recordedData.value.push(frame);
-	}
+  if (isRecording.value) {
+    const frame = {
+      timestamp: new Date().toISOString(),
+      device: {
+        id: props.device.id,
+        device_type: props.device.device_type,
+        source: props.device.source,
+      },
+      data: data,
+    };
+    recordedData.value.push(frame);
+  }
 };
 
 defineExpose({ recordData });

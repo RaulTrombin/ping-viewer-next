@@ -200,16 +200,16 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from 'vue';
 
 const props = defineProps({
-	serverUrl: {
-		type: String,
-		required: true,
-	},
+  serverUrl: {
+    type: String,
+    required: true,
+  },
 });
 
-const emit = defineEmits(["openDevice"]);
+const emit = defineEmits(['openDevice']);
 
 const devices = ref([]);
 const isLoading = ref(false);
@@ -225,260 +225,259 @@ const deviceToDelete = ref(null);
 let refreshInterval = null;
 
 const deviceTypes = [
-	{ title: "Auto Detect", value: "Auto" },
-	{ title: "Ping1D", value: "Ping1D" },
-	{ title: "Ping360", value: "Ping360" },
+  { title: 'Auto Detect', value: 'Auto' },
+  { title: 'Ping1D', value: 'Ping1D' },
+  { title: 'Ping360', value: 'Ping360' },
 ];
 
 const connectionTypes = [
-	{ title: "UDP", value: "UdpStream" },
-	{ title: "Serial", value: "SerialStream" },
+  { title: 'UDP', value: 'UdpStream' },
+  { title: 'Serial', value: 'SerialStream' },
 ];
 
 const newDevice = ref({
-	device_selection: "Auto",
-	connectionType: "UdpStream",
-	udp: {
-		ip: "",
-		port: 8080,
-	},
-	serial: {
-		path: "/dev/ttyUSB0",
-		baudrate: 2500000,
-	},
+  device_selection: 'Auto',
+  connectionType: 'UdpStream',
+  udp: {
+    ip: '',
+    port: 8080,
+  },
+  serial: {
+    path: '/dev/ttyUSB0',
+    baudrate: 2500000,
+  },
 });
 
 const getStatusColor = (status) => {
-	switch (status) {
-		case "ContinuousMode":
-			return "success";
-		case "Running":
-			return "info";
-		case "Error":
-			return "error";
-		default:
-			return "warning";
-	}
+  switch (status) {
+    case 'ContinuousMode':
+      return 'success';
+    case 'Running':
+      return 'info';
+    case 'Error':
+      return 'error';
+    default:
+      return 'warning';
+  }
 };
 
 const fetchDevices = async () => {
-	try {
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "List",
-				module: "DeviceManager",
-			}),
-		});
+  try {
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'List',
+        module: 'DeviceManager',
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to fetch devices");
+    if (!response.ok) throw new Error('Failed to fetch devices');
 
-		const data = await response.json();
-		devices.value = data.DeviceInfo || [];
-		error.value = null;
-	} catch (err) {
-		console.error("Error fetching devices:", err);
-		error.value = `Failed to fetch devices: ${err.message}`;
-	}
+    const data = await response.json();
+    devices.value = data.DeviceInfo || [];
+    error.value = null;
+  } catch (err) {
+    console.error('Error fetching devices:', err);
+    error.value = `Failed to fetch devices: ${err.message}`;
+  }
 };
 
 const refreshDevices = async () => {
-	isRefreshing.value = true;
-	await fetchDevices();
-	isRefreshing.value = false;
+  isRefreshing.value = true;
+  await fetchDevices();
+  isRefreshing.value = false;
 };
 
 const autoCreateDevices = async () => {
-	isAutoCreating.value = true;
-	error.value = null;
+  isAutoCreating.value = true;
+  error.value = null;
 
-	try {
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "AutoCreate",
-				module: "DeviceManager",
-			}),
-		});
+  try {
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'AutoCreate',
+        module: 'DeviceManager',
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to auto-create devices");
+    if (!response.ok) throw new Error('Failed to auto-create devices');
 
-		const data = await response.json();
-		await refreshDevices();
+    const data = await response.json();
+    await refreshDevices();
 
-		if (data.DeviceInfo?.length > 0) {
-			console.log(`Created ${data.DeviceInfo.length} devices`);
-		}
-	} catch (err) {
-		console.error("Error auto-creating devices:", err);
-		error.value = `Failed to auto-create devices: ${err.message}`;
-	} finally {
-		isAutoCreating.value = false;
-	}
+    if (data.DeviceInfo?.length > 0) {
+    }
+  } catch (err) {
+    console.error('Error auto-creating devices:', err);
+    error.value = `Failed to auto-create devices: ${err.message}`;
+  } finally {
+    isAutoCreating.value = false;
+  }
 };
 
 const createDevice = async () => {
-	isCreating.value = true;
-	error.value = null;
+  isCreating.value = true;
+  error.value = null;
 
-	try {
-		const source =
-			newDevice.value.connectionType === "UdpStream"
-				? {
-						UdpStream: {
-							ip: newDevice.value.udp.ip,
-							port: newDevice.value.udp.port,
-						},
-					}
-				: {
-						SerialStream: {
-							path: newDevice.value.serial.path,
-							baudrate: newDevice.value.serial.baudrate,
-						},
-					};
+  try {
+    const source =
+      newDevice.value.connectionType === 'UdpStream'
+        ? {
+            UdpStream: {
+              ip: newDevice.value.udp.ip,
+              port: newDevice.value.udp.port,
+            },
+          }
+        : {
+            SerialStream: {
+              path: newDevice.value.serial.path,
+              baudrate: newDevice.value.serial.baudrate,
+            },
+          };
 
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "Create",
-				module: "DeviceManager",
-				payload: {
-					device_selection: newDevice.value.device_selection,
-					source,
-				},
-			}),
-		});
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'Create',
+        module: 'DeviceManager',
+        payload: {
+          device_selection: newDevice.value.device_selection,
+          source,
+        },
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to create device");
+    if (!response.ok) throw new Error('Failed to create device');
 
-		await refreshDevices();
-		showCreateDialog.value = false;
-	} catch (err) {
-		console.error("Error creating device:", err);
-		error.value = `Failed to create device: ${err.message}`;
-	} finally {
-		isCreating.value = false;
-	}
+    await refreshDevices();
+    showCreateDialog.value = false;
+  } catch (err) {
+    console.error('Error creating device:', err);
+    error.value = `Failed to create device: ${err.message}`;
+  } finally {
+    isCreating.value = false;
+  }
 };
 
 const openDevice = (device) => {
-	emit("openDevice", device);
+  emit('openDevice', device);
 };
 
 const confirmDelete = (device) => {
-	deviceToDelete.value = device;
-	showDeleteDialog.value = true;
+  deviceToDelete.value = device;
+  showDeleteDialog.value = true;
 };
 
 const deleteDevice = async () => {
-	if (!deviceToDelete.value) return;
+  if (!deviceToDelete.value) return;
 
-	isDeleting.value = true;
-	error.value = null;
+  isDeleting.value = true;
+  error.value = null;
 
-	try {
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "Delete",
-				module: "DeviceManager",
-				payload: {
-					uuid: deviceToDelete.value.id,
-				},
-			}),
-		});
+  try {
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'Delete',
+        module: 'DeviceManager',
+        payload: {
+          uuid: deviceToDelete.value.id,
+        },
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to delete device");
+    if (!response.ok) throw new Error('Failed to delete device');
 
-		await refreshDevices();
-		showDeleteDialog.value = false;
-	} catch (err) {
-		console.error("Error deleting device:", err);
-		error.value = `Failed to delete device: ${err.message}`;
-	} finally {
-		isDeleting.value = false;
-		deviceToDelete.value = null;
-	}
+    await refreshDevices();
+    showDeleteDialog.value = false;
+  } catch (err) {
+    console.error('Error deleting device:', err);
+    error.value = `Failed to delete device: ${err.message}`;
+  } finally {
+    isDeleting.value = false;
+    deviceToDelete.value = null;
+  }
 };
 
 const enableContinuousMode = async (deviceId) => {
-	loadingStates.value[deviceId] = true;
-	try {
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "EnableContinuousMode",
-				module: "DeviceManager",
-				payload: {
-					uuid: deviceId,
-				},
-			}),
-		});
+  loadingStates.value[deviceId] = true;
+  try {
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'EnableContinuousMode',
+        module: 'DeviceManager',
+        payload: {
+          uuid: deviceId,
+        },
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to enable continuous mode");
-		await refreshDevices();
-	} catch (err) {
-		console.error("Error enabling continuous mode:", err);
-		error.value = `Failed to enable continuous mode: ${err.message}`;
-	} finally {
-		loadingStates.value[deviceId] = false;
-	}
+    if (!response.ok) throw new Error('Failed to enable continuous mode');
+    await refreshDevices();
+  } catch (err) {
+    console.error('Error enabling continuous mode:', err);
+    error.value = `Failed to enable continuous mode: ${err.message}`;
+  } finally {
+    loadingStates.value[deviceId] = false;
+  }
 };
 
 const disableContinuousMode = async (deviceId) => {
-	loadingStates.value[deviceId] = true;
-	try {
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				command: "DisableContinuousMode",
-				module: "DeviceManager",
-				payload: {
-					uuid: deviceId,
-				},
-			}),
-		});
+  loadingStates.value[deviceId] = true;
+  try {
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'DisableContinuousMode',
+        module: 'DeviceManager',
+        payload: {
+          uuid: deviceId,
+        },
+      }),
+    });
 
-		if (!response.ok) throw new Error("Failed to disable continuous mode");
-		await refreshDevices();
-	} catch (err) {
-		console.error("Error disabling continuous mode:", err);
-		error.value = `Failed to disable continuous mode: ${err.message}`;
-	} finally {
-		loadingStates.value[deviceId] = false;
-	}
+    if (!response.ok) throw new Error('Failed to disable continuous mode');
+    await refreshDevices();
+  } catch (err) {
+    console.error('Error disabling continuous mode:', err);
+    error.value = `Failed to disable continuous mode: ${err.message}`;
+  } finally {
+    loadingStates.value[deviceId] = false;
+  }
 };
 
 onMounted(() => {
-	isLoading.value = true;
-	fetchDevices().finally(() => {
-		isLoading.value = false;
-	});
-	refreshInterval = setInterval(fetchDevices, 5000);
+  isLoading.value = true;
+  fetchDevices().finally(() => {
+    isLoading.value = false;
+  });
+  refreshInterval = setInterval(fetchDevices, 5000);
 });
 
 onUnmounted(() => {
-	if (refreshInterval) {
-		clearInterval(refreshInterval);
-	}
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
 });
 </script>
 

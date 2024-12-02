@@ -186,305 +186,299 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from "vue";
-import SonarColorOptions from "../widgets/SonarColorOptions.vue";
-import { colorPalettes } from "../widgets/SonarColorOptions.vue";
-import ColorPickerField from "./ColorPickerField.vue";
+import { reactive, ref, watch } from 'vue';
+import SonarColorOptions from '../widgets/SonarColorOptions.vue';
+import { colorPalettes } from '../widgets/SonarColorOptions.vue';
+import ColorPickerField from './ColorPickerField.vue';
 
 const props = defineProps({
-	commonSettings: {
-		type: Object,
-		required: true,
-	},
-	ping1DSettings: {
-		type: Object,
-		required: true,
-	},
-	ping360Settings: {
-		type: Object,
-		required: true,
-	},
-	isDarkMode: {
-		type: Boolean,
-		required: true,
-	},
+  commonSettings: {
+    type: Object,
+    required: true,
+  },
+  ping1DSettings: {
+    type: Object,
+    required: true,
+  },
+  ping360Settings: {
+    type: Object,
+    required: true,
+  },
+  isDarkMode: {
+    type: Boolean,
+    required: true,
+  },
 });
 
 const emit = defineEmits([
-	"update:commonSettings",
-	"update:ping1DSettings",
-	"update:ping360Settings",
-	"update:isDarkMode",
-	"save",
-	"reset",
+  'update:commonSettings',
+  'update:ping1DSettings',
+  'update:ping360Settings',
+  'update:isDarkMode',
+  'save',
+  'reset',
 ]);
 
-const activeSettingsTab = ref("general");
-const selectedPreset = ref("default");
+const activeSettingsTab = ref('general');
+const selectedPreset = ref('default');
 const localCommonSettings = reactive({ ...props.commonSettings });
 const localPing1DSettings = reactive({ ...props.ping1DSettings });
 const localPing360Settings = reactive({ ...props.ping360Settings });
 
 const accessibilityPresets = [
-	{ title: "Default", value: "default" },
-	{ title: "Deuteranopia (Red-Green)", value: "deuteranopia" },
-	{ title: "Protanopia (Red-Green)", value: "protanopia" },
-	{ title: "Tritanopia (Blue-Yellow)", value: "tritanopia" },
-	{ title: "Monochromacy", value: "monochromacy" },
-	{ title: "High Contrast", value: "highContrast" },
+  { title: 'Default', value: 'default' },
+  { title: 'Deuteranopia (Red-Green)', value: 'deuteranopia' },
+  { title: 'Protanopia (Red-Green)', value: 'protanopia' },
+  { title: 'Tritanopia (Blue-Yellow)', value: 'tritanopia' },
+  { title: 'Monochromacy', value: 'monochromacy' },
+  { title: 'High Contrast', value: 'highContrast' },
 ];
 
 const presetConfigs = {
-	default: {
-		description: "Default color settings",
-		settings: {
-			commonSettings: {
-				colorPalette: "Ocean",
-			},
-			ping1DSettings: {
-				columnCount: 100,
-				tickCount: 5,
-				depthLineColor: "#ffeb3b",
-				depthTextColor: "#ffeb3b",
-				currentDepthColor: "#ffeb3b",
-				confidenceColor: "#4caf50",
-				textBackground: "rgba(0, 0, 0, 0.5)",
-				depthArrowColor: "#f44336",
-				debug: false,
-			},
-			ping360Settings: {
-				lineColor: "#f44336",
-				lineWidth: 0.5,
-				numMarkers: 5,
-				showRadiusLines: true,
-				showMarkers: true,
-				radiusLineColor: "#4caf50",
-				markerColor: "#4caf50",
-				radiusLineWidth: 0.5,
-				debug: false,
-			},
-		},
-	},
-	deuteranopia: {
-		description: "Optimized for red-green color blindness (deuteranopia)",
-		settings: {
-			commonSettings: {
-				colorPalette: "Monochrome Black",
-			},
-			ping1DSettings: {
-				depthLineColor: "#0077BB",
-				depthTextColor: "#0077BB",
-				currentDepthColor: "#0077BB",
-				confidenceColor: "#EE7733",
-				textBackground: "rgba(0, 0, 0, 0.7)",
-				depthArrowColor: "#EE7733",
-			},
-			ping360Settings: {
-				lineColor: "#EE7733",
-				radiusLineColor: "#0077BB",
-				markerColor: "#0077BB",
-			},
-		},
-	},
-	protanopia: {
-		description: "Optimized for red-green color blindness (protanopia)",
-		settings: {
-			commonSettings: {
-				colorPalette: "Monochrome Black",
-			},
-			ping1DSettings: {
-				depthLineColor: "#0077BB",
-				depthTextColor: "#0077BB",
-				currentDepthColor: "#0077BB",
-				confidenceColor: "#CCBB44",
-				textBackground: "rgba(0, 0, 0, 0.7)",
-				depthArrowColor: "#CCBB44",
-			},
-			ping360Settings: {
-				lineColor: "#CCBB44",
-				radiusLineColor: "#0077BB",
-				markerColor: "#0077BB",
-			},
-		},
-	},
-	tritanopia: {
-		description: "Optimized for blue-yellow color blindness",
-		settings: {
-			commonSettings: {
-				colorPalette: "Monochrome Black",
-			},
-			ping1DSettings: {
-				depthLineColor: "#FF99AA",
-				depthTextColor: "#FF99AA",
-				currentDepthColor: "#FF99AA",
-				confidenceColor: "#44BB99",
-				textBackground: "rgba(0, 0, 0, 0.7)",
-				depthArrowColor: "#44BB99",
-			},
-			ping360Settings: {
-				lineColor: "#FF99AA",
-				radiusLineColor: "#44BB99",
-				markerColor: "#44BB99",
-			},
-		},
-	},
-	monochromacy: {
-		description: "Monochrome mode using high-contrast patterns",
-		settings: {
-			commonSettings: {
-				colorPalette: "Monochrome Black",
-			},
-			ping1DSettings: {
-				depthLineColor: "#FFFFFF",
-				depthTextColor: "#FFFFFF",
-				currentDepthColor: "#FFFFFF",
-				confidenceColor: "#CCCCCC",
-				textBackground: "rgba(0, 0, 0, 0.9)",
-				depthArrowColor: "#FFFFFF",
-			},
-			ping360Settings: {
-				lineColor: "#FFFFFF",
-				radiusLineColor: "#CCCCCC",
-				markerColor: "#FFFFFF",
-			},
-		},
-	},
-	highContrast: {
-		description: "High contrast mode for better visibility",
-		settings: {
-			commonSettings: {
-				colorPalette: "Monochrome White",
-			},
-			ping1DSettings: {
-				depthLineColor: "#FFFFFF",
-				depthTextColor: "#FFFFFF",
-				currentDepthColor: "#FFFFFF",
-				confidenceColor: "#FFFFFF",
-				textBackground: "rgba(0, 0, 0, 1)",
-				depthArrowColor: "#FFFFFF",
-			},
-			ping360Settings: {
-				lineColor: "#FFFFFF",
-				radiusLineColor: "#FFFFFF",
-				markerColor: "#FFFFFF",
-				lineWidth: 1.0,
-				radiusLineWidth: 1.0,
-			},
-		},
-	},
+  default: {
+    description: 'Default color settings',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Ocean',
+      },
+      ping1DSettings: {
+        columnCount: 100,
+        tickCount: 5,
+        depthLineColor: '#ffeb3b',
+        depthTextColor: '#ffeb3b',
+        currentDepthColor: '#ffeb3b',
+        confidenceColor: '#4caf50',
+        textBackground: 'rgba(0, 0, 0, 0.5)',
+        depthArrowColor: '#f44336',
+        debug: false,
+      },
+      ping360Settings: {
+        lineColor: '#f44336',
+        lineWidth: 0.5,
+        numMarkers: 5,
+        showRadiusLines: true,
+        showMarkers: true,
+        radiusLineColor: '#4caf50',
+        markerColor: '#4caf50',
+        radiusLineWidth: 0.5,
+        debug: false,
+      },
+    },
+  },
+  deuteranopia: {
+    description: 'Optimized for red-green color blindness (deuteranopia)',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Monochrome Black',
+      },
+      ping1DSettings: {
+        depthLineColor: '#0077BB',
+        depthTextColor: '#0077BB',
+        currentDepthColor: '#0077BB',
+        confidenceColor: '#EE7733',
+        textBackground: 'rgba(0, 0, 0, 0.7)',
+        depthArrowColor: '#EE7733',
+      },
+      ping360Settings: {
+        lineColor: '#EE7733',
+        radiusLineColor: '#0077BB',
+        markerColor: '#0077BB',
+      },
+    },
+  },
+  protanopia: {
+    description: 'Optimized for red-green color blindness (protanopia)',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Monochrome Black',
+      },
+      ping1DSettings: {
+        depthLineColor: '#0077BB',
+        depthTextColor: '#0077BB',
+        currentDepthColor: '#0077BB',
+        confidenceColor: '#CCBB44',
+        textBackground: 'rgba(0, 0, 0, 0.7)',
+        depthArrowColor: '#CCBB44',
+      },
+      ping360Settings: {
+        lineColor: '#CCBB44',
+        radiusLineColor: '#0077BB',
+        markerColor: '#0077BB',
+      },
+    },
+  },
+  tritanopia: {
+    description: 'Optimized for blue-yellow color blindness',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Monochrome Black',
+      },
+      ping1DSettings: {
+        depthLineColor: '#FF99AA',
+        depthTextColor: '#FF99AA',
+        currentDepthColor: '#FF99AA',
+        confidenceColor: '#44BB99',
+        textBackground: 'rgba(0, 0, 0, 0.7)',
+        depthArrowColor: '#44BB99',
+      },
+      ping360Settings: {
+        lineColor: '#FF99AA',
+        radiusLineColor: '#44BB99',
+        markerColor: '#44BB99',
+      },
+    },
+  },
+  monochromacy: {
+    description: 'Monochrome mode using high-contrast patterns',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Monochrome Black',
+      },
+      ping1DSettings: {
+        depthLineColor: '#FFFFFF',
+        depthTextColor: '#FFFFFF',
+        currentDepthColor: '#FFFFFF',
+        confidenceColor: '#CCCCCC',
+        textBackground: 'rgba(0, 0, 0, 0.9)',
+        depthArrowColor: '#FFFFFF',
+      },
+      ping360Settings: {
+        lineColor: '#FFFFFF',
+        radiusLineColor: '#CCCCCC',
+        markerColor: '#FFFFFF',
+      },
+    },
+  },
+  highContrast: {
+    description: 'High contrast mode for better visibility',
+    settings: {
+      commonSettings: {
+        colorPalette: 'Monochrome White',
+      },
+      ping1DSettings: {
+        depthLineColor: '#FFFFFF',
+        depthTextColor: '#FFFFFF',
+        currentDepthColor: '#FFFFFF',
+        confidenceColor: '#FFFFFF',
+        textBackground: 'rgba(0, 0, 0, 1)',
+        depthArrowColor: '#FFFFFF',
+      },
+      ping360Settings: {
+        lineColor: '#FFFFFF',
+        radiusLineColor: '#FFFFFF',
+        markerColor: '#FFFFFF',
+        lineWidth: 1.0,
+        radiusLineWidth: 1.0,
+      },
+    },
+  },
 };
 
 const getPresetDescription = (preset) => {
-	return presetConfigs[preset]?.description || "";
+  return presetConfigs[preset]?.description || '';
 };
 
 const handleReset = () => {
-	selectedPreset.value = "default";
-	emit("reset");
-	localStorage.removeItem("selectedAccessibilityPreset");
+  selectedPreset.value = 'default';
+  emit('reset');
+  localStorage.removeItem('selectedAccessibilityPreset');
 };
 
 const handlePresetChange = (preset) => {
-	if (preset === "default") {
-		handleReset();
-		return;
-	}
+  if (preset === 'default') {
+    handleReset();
+    return;
+  }
 
-	const config = presetConfigs[preset].settings;
+  const config = presetConfigs[preset].settings;
 
-	Object.assign(localCommonSettings, {
-		...localCommonSettings,
-		...config.commonSettings,
-	});
+  Object.assign(localCommonSettings, {
+    ...localCommonSettings,
+    ...config.commonSettings,
+  });
 
-	Object.assign(localPing1DSettings, {
-		...localPing1DSettings,
-		...config.ping1DSettings,
-	});
+  Object.assign(localPing1DSettings, {
+    ...localPing1DSettings,
+    ...config.ping1DSettings,
+  });
 
-	Object.assign(localPing360Settings, {
-		...localPing360Settings,
-		...config.ping360Settings,
-	});
+  Object.assign(localPing360Settings, {
+    ...localPing360Settings,
+    ...config.ping360Settings,
+  });
 
-	emit("update:commonSettings", { ...localCommonSettings });
-	emit("update:ping1DSettings", { ...localPing1DSettings });
-	emit("update:ping360Settings", { ...localPing360Settings });
+  emit('update:commonSettings', { ...localCommonSettings });
+  emit('update:ping1DSettings', { ...localPing1DSettings });
+  emit('update:ping360Settings', { ...localPing360Settings });
 
-	localStorage.setItem("selectedAccessibilityPreset", preset);
+  localStorage.setItem('selectedAccessibilityPreset', preset);
 };
 
 const updateColorPalette = (newPalette) => {
-	localCommonSettings.colorPalette = newPalette;
-	if (newPalette === "Custom") {
-		localCommonSettings.customPalette = colorPalettes.Custom;
-	}
-	emit("update:commonSettings", { ...localCommonSettings });
+  localCommonSettings.colorPalette = newPalette;
+  if (newPalette === 'Custom') {
+    localCommonSettings.customPalette = colorPalettes.Custom;
+  }
+  emit('update:commonSettings', { ...localCommonSettings });
 };
 
 const saveSettings = () => {
-	localStorage.setItem("common-settings", JSON.stringify(localCommonSettings));
-	localStorage.setItem("ping1d-settings", JSON.stringify(localPing1DSettings));
-	localStorage.setItem(
-		"ping360-settings",
-		JSON.stringify(localPing360Settings),
-	);
+  localStorage.setItem('common-settings', JSON.stringify(localCommonSettings));
+  localStorage.setItem('ping1d-settings', JSON.stringify(localPing1DSettings));
+  localStorage.setItem('ping360-settings', JSON.stringify(localPing360Settings));
 
-	if (localCommonSettings.customPalette?.length > 0) {
-		localStorage.setItem(
-			"customColorPalette",
-			JSON.stringify(localCommonSettings.customPalette),
-		);
-	}
+  if (localCommonSettings.customPalette?.length > 0) {
+    localStorage.setItem('customColorPalette', JSON.stringify(localCommonSettings.customPalette));
+  }
 
-	emit("save");
+  emit('save');
 };
 
 watch(
-	() => props.commonSettings,
-	(newSettings) => {
-		Object.assign(localCommonSettings, newSettings);
-	},
-	{ deep: true },
+  () => props.commonSettings,
+  (newSettings) => {
+    Object.assign(localCommonSettings, newSettings);
+  },
+  { deep: true }
 );
 
 watch(
-	() => props.ping1DSettings,
-	(newSettings) => {
-		Object.assign(localPing1DSettings, newSettings);
-	},
-	{ deep: true },
+  () => props.ping1DSettings,
+  (newSettings) => {
+    Object.assign(localPing1DSettings, newSettings);
+  },
+  { deep: true }
 );
 
 watch(
-	() => props.ping360Settings,
-	(newSettings) => {
-		Object.assign(localPing360Settings, newSettings);
-	},
-	{ deep: true },
+  () => props.ping360Settings,
+  (newSettings) => {
+    Object.assign(localPing360Settings, newSettings);
+  },
+  { deep: true }
 );
 
 watch(
-	localCommonSettings,
-	(newSettings) => {
-		emit("update:commonSettings", { ...newSettings });
-	},
-	{ deep: true },
+  localCommonSettings,
+  (newSettings) => {
+    emit('update:commonSettings', { ...newSettings });
+  },
+  { deep: true }
 );
 
 watch(
-	localPing1DSettings,
-	(newSettings) => {
-		emit("update:ping1DSettings", { ...newSettings });
-	},
-	{ deep: true },
+  localPing1DSettings,
+  (newSettings) => {
+    emit('update:ping1DSettings', { ...newSettings });
+  },
+  { deep: true }
 );
 
 watch(
-	localPing360Settings,
-	(newSettings) => {
-		emit("update:ping360Settings", { ...newSettings });
-	},
-	{ deep: true },
+  localPing360Settings,
+  (newSettings) => {
+    emit('update:ping360Settings', { ...newSettings });
+  },
+  { deep: true }
 );
 </script>

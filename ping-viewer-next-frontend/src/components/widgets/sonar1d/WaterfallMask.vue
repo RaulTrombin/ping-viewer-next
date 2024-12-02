@@ -67,32 +67,32 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import WaterfallShader from "./WaterfallShader.vue";
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import WaterfallShader from './WaterfallShader.vue';
 
 const props = defineProps({
-	width: { type: Number, required: true },
-	height: { type: Number, required: true },
-	maxDepth: { type: Number, required: true },
-	minDepth: { type: Number, required: true },
-	columnCount: { type: Number, default: 200 },
-	sensorData: { type: Array, required: true },
-	colorPalette: { type: String, required: true },
-	getColorFromPalette: { type: Function, required: true },
-	currentDepth: { type: Number, required: true },
-	accuracy: { type: Number, required: true },
-	confidence: { type: Number, required: true },
-	depthLineColor: { type: String, default: "yellow" },
-	depthTextColor: { type: String, default: "yellow" },
-	currentDepthColor: { type: String, default: "yellow" },
-	confidenceColor: { type: String, default: "#00FF00" },
-	virtualMaxDepthColor: { type: String, default: "#FF8C00" },
-	textBackground: { type: String, default: "rgba(0, 0, 0, 0.5)" },
-	depthArrowColor: { type: String, default: "yellow" },
-	tickCount: { type: Number, default: 5 },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true },
+  maxDepth: { type: Number, required: true },
+  minDepth: { type: Number, required: true },
+  columnCount: { type: Number, default: 200 },
+  sensorData: { type: Array, required: true },
+  colorPalette: { type: String, required: true },
+  getColorFromPalette: { type: Function, required: true },
+  currentDepth: { type: Number, required: true },
+  accuracy: { type: Number, required: true },
+  confidence: { type: Number, required: true },
+  depthLineColor: { type: String, default: 'yellow' },
+  depthTextColor: { type: String, default: 'yellow' },
+  currentDepthColor: { type: String, default: 'yellow' },
+  confidenceColor: { type: String, default: '#00FF00' },
+  virtualMaxDepthColor: { type: String, default: '#FF8C00' },
+  textBackground: { type: String, default: 'rgba(0, 0, 0, 0.5)' },
+  depthArrowColor: { type: String, default: 'yellow' },
+  tickCount: { type: Number, default: 5 },
 });
 
-const emit = defineEmits(["update:columnCount"]);
+const emit = defineEmits(['update:columnCount']);
 
 const waterfallShader = ref(null);
 const overlayCanvas = ref(null);
@@ -102,133 +102,125 @@ const hoveredColumn = ref(null);
 const historicalData = ref([]);
 
 const updateVirtualMaxDepth = () => {
-	if (historicalData.value.length === 0) {
-		virtualMaxDepth.value = props.maxDepth;
-		return;
-	}
+  if (historicalData.value.length === 0) {
+    virtualMaxDepth.value = props.maxDepth;
+    return;
+  }
 
-	const maxHistoricalDepth = Math.max(
-		...historicalData.value.map((data) => data.maxDepth),
-	);
+  const maxHistoricalDepth = Math.max(...historicalData.value.map((data) => data.maxDepth));
 
-	if (maxHistoricalDepth > virtualMaxDepth.value) {
-		virtualMaxDepth.value = maxHistoricalDepth;
-	} else if (maxHistoricalDepth < virtualMaxDepth.value) {
-		virtualMaxDepth.value = Math.max(props.maxDepth, maxHistoricalDepth);
-	}
+  if (maxHistoricalDepth > virtualMaxDepth.value) {
+    virtualMaxDepth.value = maxHistoricalDepth;
+  } else if (maxHistoricalDepth < virtualMaxDepth.value) {
+    virtualMaxDepth.value = Math.max(props.maxDepth, maxHistoricalDepth);
+  }
 };
 
 watch(
-	() => props.sensorData,
-	() => {
-		historicalData.value.unshift({
-			depth: props.currentDepth,
-			confidence: props.confidence,
-			maxDepth: props.maxDepth,
-			minDepth: props.minDepth,
-			accuracy: props.accuracy,
-			virtualMaxDepth: virtualMaxDepth.value,
-		});
+  () => props.sensorData,
+  () => {
+    historicalData.value.unshift({
+      depth: props.currentDepth,
+      confidence: props.confidence,
+      maxDepth: props.maxDepth,
+      minDepth: props.minDepth,
+      accuracy: props.accuracy,
+      virtualMaxDepth: virtualMaxDepth.value,
+    });
 
-		if (historicalData.value.length > props.columnCount) {
-			historicalData.value.pop();
-		}
+    if (historicalData.value.length > props.columnCount) {
+      historicalData.value.pop();
+    }
 
-		updateVirtualMaxDepth();
-		drawOverlay();
-	},
+    updateVirtualMaxDepth();
+    drawOverlay();
+  }
 );
 
 watch(
-	() => historicalData.value,
-	() => {
-		updateVirtualMaxDepth();
-	},
-	{ deep: true },
+  () => historicalData.value,
+  () => {
+    updateVirtualMaxDepth();
+  },
+  { deep: true }
 );
 
 const depthTicks = computed(() => {
-	const depthRange = virtualMaxDepth.value - props.minDepth;
-	return Array.from(
-		{ length: props.tickCount },
-		(_, i) => props.minDepth + (i / (props.tickCount - 1)) * depthRange,
-	);
+  const depthRange = virtualMaxDepth.value - props.minDepth;
+  return Array.from(
+    { length: props.tickCount },
+    (_, i) => props.minDepth + (i / (props.tickCount - 1)) * depthRange
+  );
 });
 
 const arrowPosition = computed(() => {
-	const depthRange = virtualMaxDepth.value - props.minDepth;
-	const relativeDepth = props.currentDepth - props.minDepth;
-	return (relativeDepth / depthRange) * 100;
+  const depthRange = virtualMaxDepth.value - props.minDepth;
+  const relativeDepth = props.currentDepth - props.minDepth;
+  return (relativeDepth / depthRange) * 100;
 });
 
 const tickPosition = (depth) => {
-	const depthRange = virtualMaxDepth.value - props.minDepth;
-	const relativeDepth = depth - props.minDepth;
-	return (relativeDepth / depthRange) * 100;
+  const depthRange = virtualMaxDepth.value - props.minDepth;
+  const relativeDepth = depth - props.minDepth;
+  return (relativeDepth / depthRange) * 100;
 };
 
 const handleMouseMove = (event) => {
-	const rect = event.target.getBoundingClientRect();
-	const x = event.clientX - rect.left;
-	const columnWidth = rect.width / props.columnCount;
-	hoveredColumn.value = props.columnCount - 1 - Math.floor(x / columnWidth);
-	drawOverlay();
+  const rect = event.target.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const columnWidth = rect.width / props.columnCount;
+  hoveredColumn.value = props.columnCount - 1 - Math.floor(x / columnWidth);
+  drawOverlay();
 };
 
 const handleMouseLeave = () => {
-	hoveredColumn.value = null;
-	drawOverlay();
+  hoveredColumn.value = null;
+  drawOverlay();
 };
 
 const drawOverlay = () => {
-	if (!ctx.value) return;
+  if (!ctx.value) return;
 
-	ctx.value.clearRect(
-		0,
-		0,
-		overlayCanvas.value.width,
-		overlayCanvas.value.height,
-	);
+  ctx.value.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height);
 
-	if (hoveredColumn.value !== null) {
-		const columnWidth = overlayCanvas.value.width / props.columnCount;
-		const x = (props.columnCount - 1 - hoveredColumn.value) * columnWidth;
+  if (hoveredColumn.value !== null) {
+    const columnWidth = overlayCanvas.value.width / props.columnCount;
+    const x = (props.columnCount - 1 - hoveredColumn.value) * columnWidth;
 
-		ctx.value.strokeStyle = "white";
-		ctx.value.lineWidth = 2;
-		ctx.value.strokeRect(x, 0, columnWidth, overlayCanvas.value.height);
+    ctx.value.strokeStyle = 'white';
+    ctx.value.lineWidth = 2;
+    ctx.value.strokeRect(x, 0, columnWidth, overlayCanvas.value.height);
 
-		if (historicalData.value[hoveredColumn.value]) {
-			const columnData = historicalData.value[hoveredColumn.value];
-			const y =
-				((columnData.depth - props.minDepth) /
-					(virtualMaxDepth.value - props.minDepth)) *
-				overlayCanvas.value.height;
+    if (historicalData.value[hoveredColumn.value]) {
+      const columnData = historicalData.value[hoveredColumn.value];
+      const y =
+        ((columnData.depth - props.minDepth) / (virtualMaxDepth.value - props.minDepth)) *
+        overlayCanvas.value.height;
 
-			ctx.value.fillStyle = "rgba(255, 0, 0, 0.5)";
-			ctx.value.fillRect(x, y - 5, columnWidth, 10);
-			ctx.value.strokeStyle = "red";
-			ctx.value.strokeRect(x, y - 5, columnWidth, 10);
-		}
-	}
+      ctx.value.fillStyle = 'rgba(255, 0, 0, 0.5)';
+      ctx.value.fillRect(x, y - 5, columnWidth, 10);
+      ctx.value.strokeStyle = 'red';
+      ctx.value.strokeRect(x, y - 5, columnWidth, 10);
+    }
+  }
 };
 
 const resizeOverlayCanvas = () => {
-	if (overlayCanvas.value) {
-		overlayCanvas.value.width = overlayCanvas.value.offsetWidth;
-		overlayCanvas.value.height = overlayCanvas.value.offsetHeight;
-		drawOverlay();
-	}
+  if (overlayCanvas.value) {
+    overlayCanvas.value.width = overlayCanvas.value.offsetWidth;
+    overlayCanvas.value.height = overlayCanvas.value.offsetHeight;
+    drawOverlay();
+  }
 };
 
 onMounted(() => {
-	ctx.value = overlayCanvas.value.getContext("2d");
-	resizeOverlayCanvas();
-	window.addEventListener("resize", resizeOverlayCanvas);
+  ctx.value = overlayCanvas.value.getContext('2d');
+  resizeOverlayCanvas();
+  window.addEventListener('resize', resizeOverlayCanvas);
 });
 
 onUnmounted(() => {
-	window.removeEventListener("resize", resizeOverlayCanvas);
+  window.removeEventListener('resize', resizeOverlayCanvas);
 });
 </script>
 

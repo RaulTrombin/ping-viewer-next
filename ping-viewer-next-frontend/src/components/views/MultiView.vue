@@ -61,79 +61,73 @@
 </template>
 
 <script setup>
-import { useDeviceFetching } from "@/composables/useDeviceFetching";
-import { computed, inject, ref } from "vue";
-import DeviceCard from "../utils/DeviceCard.vue";
-import Ping1DLoader from "../widgets/sonar1d/Ping1DLoader.vue";
-import Ping360Loader from "../widgets/sonar360/Ping360Loader.vue";
+import { useDeviceFetching } from '@/composables/useDeviceFetching';
+import { computed, inject, ref } from 'vue';
+import DeviceCard from '../utils/DeviceCard.vue';
+import Ping1DLoader from '../widgets/sonar1d/Ping1DLoader.vue';
+import Ping360Loader from '../widgets/sonar360/Ping360Loader.vue';
 
 const props = defineProps({
-	serverUrl: {
-		type: String,
-		required: true,
-	},
+  serverUrl: {
+    type: String,
+    required: true,
+  },
 });
 
-const { commonSettings, ping1DSettings, ping360Settings } =
-	inject("deviceSettings");
+const { commonSettings, ping1DSettings, ping360Settings } = inject('deviceSettings');
 
 const { deviceInfo } = useDeviceFetching(props.serverUrl);
 
 const availableDevices = computed(() => {
-	return (
-		deviceInfo.value.DeviceInfo?.filter(
-			(device) => device.status === "ContinuousMode",
-		) || []
-	);
+  return deviceInfo.value.DeviceInfo?.filter((device) => device.status === 'ContinuousMode') || [];
 });
 
 const selectedDevices = ref([]);
 const showDeviceDialog = ref(false);
 
 const toggleDevice = (device) => {
-	const index = selectedDevices.value.findIndex((d) => d.id === device.id);
-	if (index === -1) {
-		selectedDevices.value.push(device);
-	} else {
-		selectedDevices.value.splice(index, 1);
-	}
+  const index = selectedDevices.value.findIndex((d) => d.id === device.id);
+  if (index === -1) {
+    selectedDevices.value.push(device);
+  } else {
+    selectedDevices.value.splice(index, 1);
+  }
 };
 
 const removeDevice = (device) => {
-	const index = selectedDevices.value.findIndex((d) => d.id === device.id);
-	if (index !== -1) {
-		selectedDevices.value.splice(index, 1);
-	}
+  const index = selectedDevices.value.findIndex((d) => d.id === device.id);
+  if (index !== -1) {
+    selectedDevices.value.splice(index, 1);
+  }
 };
 
 const isDeviceSelected = (device) => {
-	return selectedDevices.value.some((d) => d.id === device.id);
+  return selectedDevices.value.some((d) => d.id === device.id);
 };
 
 const getDeviceComponent = (device) => {
-	return device.device_type === "Ping360" ? Ping360Loader : Ping1DLoader;
+  return device.device_type === 'Ping360' ? Ping360Loader : Ping1DLoader;
 };
 
 const getDeviceProps = (device) => {
-	const settings =
-		device.device_type === "Ping360" ? ping360Settings : ping1DSettings;
+  const settings = device.device_type === 'Ping360' ? ping360Settings : ping1DSettings;
 
-	const width = Math.floor((window.innerWidth - 48) / 2); // 48 = 3 * 16 (gap)
-	const height = Math.floor((window.innerHeight - 200 - 48) / 2); // 48 = 3 * 16 (gap)
+  const width = Math.floor((window.innerWidth - 48) / 2); // 48 = 3 * 16 (gap)
+  const height = Math.floor((window.innerHeight - 200 - 48) / 2); // 48 = 3 * 16 (gap)
 
-	return {
-		...commonSettings,
-		...settings,
-		width,
-		height,
-	};
+  return {
+    ...commonSettings,
+    ...settings,
+    width,
+    height,
+  };
 };
 
 const getWebSocketUrl = (device) => {
-	if (!device) return "";
-	const protocol = props.serverUrl.startsWith("https") ? "wss:" : "ws:";
-	const host = props.serverUrl.replace(/^https?:\/\//, "");
-	return `${protocol}//${host}/ws?device_number=${device.id}`;
+  if (!device) return '';
+  const protocol = props.serverUrl.startsWith('https') ? 'wss:' : 'ws:';
+  const host = props.serverUrl.replace(/^https?:\/\//, '');
+  return `${protocol}//${host}/ws?device_number=${device.id}`;
 };
 </script>
 

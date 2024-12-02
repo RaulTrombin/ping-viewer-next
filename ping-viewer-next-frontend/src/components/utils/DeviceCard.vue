@@ -53,50 +53,50 @@
 
 <script setup>
 const props = defineProps({
-	device: {
-		type: Object,
-		required: true,
-	},
-	selected: {
-		type: Boolean,
-		default: false,
-	},
-	clickable: {
-		type: Boolean,
-		default: true,
-	},
-	showClickHint: {
-		type: Boolean,
-		default: false,
-	},
-	showActions: {
-		type: Boolean,
-		default: false,
-	},
+  device: {
+    type: Object,
+    required: true,
+  },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
+  clickable: {
+    type: Boolean,
+    default: true,
+  },
+  showClickHint: {
+    type: Boolean,
+    default: false,
+  },
+  showActions: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["click", "dblclick", "toggle"]);
+const emit = defineEmits(['click', 'dblclick', 'toggle']);
 
 const getStatusColor = (status) => {
-	const statusColors = {
-		Running: "success",
-		Stopped: "error",
-		ContinuousMode: "info",
-		Error: "error",
-	};
-	return statusColors[status] || "warning";
+  const statusColors = {
+    Running: 'success',
+    Stopped: 'error',
+    ContinuousMode: 'info',
+    Error: 'error',
+  };
+  return statusColors[status] || 'warning';
 };
 
 const handleClick = (event) => {
-	if (props.clickable) {
-		emit("click", event);
-	}
+  if (props.clickable) {
+    emit('click', event);
+  }
 };
 
 const handleDoubleClick = (event) => {
-	if (props.clickable) {
-		emit("dblclick", event);
-	}
+  if (props.clickable) {
+    emit('dblclick', event);
+  }
 };
 </script>
 

@@ -36,6 +36,14 @@ async fn index() -> impl Responder {
     handle_embedded_file("index.html")
 }
 
+// Add new handler for /addons routes
+#[api_v2_operation(skip)]
+#[get("/addons/{tail:.*}")]
+async fn addons_handler() -> impl Responder {
+    // Always return index.html for /addons routes to let Vue router handle them
+    handle_embedded_file("index.html")
+}
+
 #[api_v2_operation(skip)]
 #[get("/{file_path:.*}")]
 async fn index_files(file_path: web::Path<String>) -> impl Responder {
@@ -60,6 +68,7 @@ pub fn register_services(cfg: &mut web::ServiceConfig) {
         .service(device_manager_device_ping1d_get)
         .service(device_manager_device_ping360_get)
         .service(device_manager_device_common_get)
+        .service(addons_handler)
         .service(index_files);
 }
 

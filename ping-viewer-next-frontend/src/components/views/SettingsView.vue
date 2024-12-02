@@ -21,17 +21,17 @@
   </template>
 
   <script setup>
-import { ref } from "vue";
-import MavlinkSettings from "../utils/MavlinkSettings.vue";
+import { ref } from 'vue';
+import MavlinkSettings from '../utils/MavlinkSettings.vue';
 
 const props = defineProps({
-	serverUrl: {
-		type: String,
-		required: true,
-	},
+  serverUrl: {
+    type: String,
+    required: true,
+  },
 });
 
-const activeTab = ref("mavlink");
+const activeTab = ref('mavlink');
 </script>
 
   <style scoped>

@@ -87,205 +87,198 @@
 </template>
 
 <script>
-import { nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue';
 
 export default {
-	props: {
-		serverUrl: {
-			type: String,
-			required: true,
-		},
-	},
-	setup(props) {
-		const view = ref("tree");
-		const status = ref("Connecting...");
-		const socket = ref(null);
-		const messages = ref([]);
-		const messageInput = ref("");
-		const messagesContainer = ref(null);
-		const organizedData = reactive({});
-		const expandedDevices = reactive({});
-		const expandedMessageContents = reactive({});
-		const autoScroll = ref(true);
-		const maxMessages = 1000;
+  props: {
+    serverUrl: {
+      type: String,
+      required: true,
+    },
+  },
+  setup(props) {
+    const view = ref('tree');
+    const status = ref('Connecting...');
+    const socket = ref(null);
+    const messages = ref([]);
+    const messageInput = ref('');
+    const messagesContainer = ref(null);
+    const organizedData = reactive({});
+    const expandedDevices = reactive({});
+    const expandedMessageContents = reactive({});
+    const autoScroll = ref(true);
+    const maxMessages = 1000;
 
-		const connectWebSocket = () => {
-			socket.value = new WebSocket(`ws://${new URL(props.serverUrl).host}/ws`);
+    const connectWebSocket = () => {
+      socket.value = new WebSocket(`ws://${new URL(props.serverUrl).host}/ws`);
 
-			socket.value.onopen = () => {
-				status.value = "Connected";
-			};
+      socket.value.onopen = () => {
+        status.value = 'Connected';
+      };
 
-			socket.value.onmessage = (event) => {
-				messages.value.push(event.data);
-				if (messages.value.length > maxMessages) {
-					messages.value = messages.value.slice(-maxMessages);
-				}
+      socket.value.onmessage = (event) => {
+        messages.value.push(event.data);
+        if (messages.value.length > maxMessages) {
+          messages.value = messages.value.slice(-maxMessages);
+        }
 
-				parseAndOrganizeMessage(event.data);
-				nextTick(() => {
-					if (autoScroll.value && messagesContainer.value) {
-						messagesContainer.value.scrollTop =
-							messagesContainer.value.scrollHeight;
-					}
-				});
-			};
+        parseAndOrganizeMessage(event.data);
+        nextTick(() => {
+          if (autoScroll.value && messagesContainer.value) {
+            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+          }
+        });
+      };
 
-			socket.value.onclose = () => {
-				status.value = "Disconnected";
-			};
+      socket.value.onclose = () => {
+        status.value = 'Disconnected';
+      };
 
-			socket.value.onerror = () => {
-				status.value = "Error";
-			};
-		};
+      socket.value.onerror = () => {
+        status.value = 'Error';
+      };
+    };
 
-		const parseAndOrganizeMessage = (message) => {
-			try {
-				const data = JSON.parse(message);
-				const deviceId = data.DeviceMessage.device_id;
-				const pingMessage = data.DeviceMessage.PingMessage;
+    const parseAndOrganizeMessage = (message) => {
+      try {
+        const data = JSON.parse(message);
+        const deviceId = data.DeviceMessage.device_id;
+        const pingMessage = data.DeviceMessage.PingMessage;
 
-				if (!organizedData[deviceId]) {
-					organizedData[deviceId] = {};
-				}
+        if (!organizedData[deviceId]) {
+          organizedData[deviceId] = {};
+        }
 
-				for (const [deviceType, messages] of Object.entries(pingMessage)) {
-					if (!organizedData[deviceId][deviceType]) {
-						organizedData[deviceId][deviceType] = {};
-					}
+        for (const [deviceType, messages] of Object.entries(pingMessage)) {
+          if (!organizedData[deviceId][deviceType]) {
+            organizedData[deviceId][deviceType] = {};
+          }
 
-					for (const [messageType, messageData] of Object.entries(messages)) {
-						if (!organizedData[deviceId][deviceType][messageType]) {
-							organizedData[deviceId][deviceType][messageType] = {
-								latestMessage: null,
-								messageHistory: [],
-								messageCount: 0,
-								frequency: 0,
-							};
-						}
+          for (const [messageType, messageData] of Object.entries(messages)) {
+            if (!organizedData[deviceId][deviceType][messageType]) {
+              organizedData[deviceId][deviceType][messageType] = {
+                latestMessage: null,
+                messageHistory: [],
+                messageCount: 0,
+                frequency: 0,
+              };
+            }
 
-						const typeData = organizedData[deviceId][deviceType][messageType];
-						typeData.latestMessage = messageData;
-						typeData.messageCount++;
+            const typeData = organizedData[deviceId][deviceType][messageType];
+            typeData.latestMessage = messageData;
+            typeData.messageCount++;
 
-						typeData.messageHistory.push({
-							timestamp: Date.now(),
-							message: messageData,
-						});
+            typeData.messageHistory.push({
+              timestamp: Date.now(),
+              message: messageData,
+            });
 
-						if (typeData.messageHistory.length > 10) {
-							typeData.messageHistory.shift();
-						}
+            if (typeData.messageHistory.length > 10) {
+              typeData.messageHistory.shift();
+            }
 
-						if (typeData.messageHistory.length > 1) {
-							const oldestTimestamp = typeData.messageHistory[0].timestamp;
-							const newestTimestamp =
-								typeData.messageHistory[typeData.messageHistory.length - 1]
-									.timestamp;
-							const timeDiff = (newestTimestamp - oldestTimestamp) / 1000;
-							typeData.frequency =
-								(typeData.messageHistory.length - 1) / timeDiff;
-						} else {
-							typeData.frequency = 0;
-						}
-					}
-				}
-			} catch (error) {
-				console.error("Error parsing message:", error);
-			}
-		};
+            if (typeData.messageHistory.length > 1) {
+              const oldestTimestamp = typeData.messageHistory[0].timestamp;
+              const newestTimestamp =
+                typeData.messageHistory[typeData.messageHistory.length - 1].timestamp;
+              const timeDiff = (newestTimestamp - oldestTimestamp) / 1000;
+              typeData.frequency = (typeData.messageHistory.length - 1) / timeDiff;
+            } else {
+              typeData.frequency = 0;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing message:', error);
+      }
+    };
 
-		const formatMessage = (message, expandArrays = false) => {
-			const formatted = {};
-			for (const [key, value] of Object.entries(message)) {
-				if (Array.isArray(value)) {
-					if (expandArrays) {
-						formatted[key] = value;
-					} else {
-						formatted[key] = `[Array(${value.length})]`;
-					}
-				} else {
-					formatted[key] = value;
-				}
-			}
-			return JSON.stringify(formatted, null, 2);
-		};
+    const formatMessage = (message, expandArrays = false) => {
+      const formatted = {};
+      for (const [key, value] of Object.entries(message)) {
+        if (Array.isArray(value)) {
+          if (expandArrays) {
+            formatted[key] = value;
+          } else {
+            formatted[key] = `[Array(${value.length})]`;
+          }
+        } else {
+          formatted[key] = value;
+        }
+      }
+      return JSON.stringify(formatted, null, 2);
+    };
 
-		const toggleDevice = (deviceId) => {
-			expandedDevices[deviceId] = !expandedDevices[deviceId];
-		};
+    const toggleDevice = (deviceId) => {
+      expandedDevices[deviceId] = !expandedDevices[deviceId];
+    };
 
-		const toggleMessageContent = (deviceId, deviceType, messageType) => {
-			const key = `${deviceId}-${deviceType}-${messageType}`;
-			expandedMessageContents[key] = !expandedMessageContents[key];
-		};
+    const toggleMessageContent = (deviceId, deviceType, messageType) => {
+      const key = `${deviceId}-${deviceType}-${messageType}`;
+      expandedMessageContents[key] = !expandedMessageContents[key];
+    };
 
-		const isMessageContentExpanded = (deviceId, deviceType, messageType) => {
-			const key = `${deviceId}-${deviceType}-${messageType}`;
-			return expandedMessageContents[key];
-		};
+    const isMessageContentExpanded = (deviceId, deviceType, messageType) => {
+      const key = `${deviceId}-${deviceType}-${messageType}`;
+      return expandedMessageContents[key];
+    };
 
-		const getTotalMessageTypes = (device) => {
-			return Object.values(device).reduce(
-				(total, deviceType) => total + Object.keys(deviceType).length,
-				0,
-			);
-		};
+    const getTotalMessageTypes = (device) => {
+      return Object.values(device).reduce(
+        (total, deviceType) => total + Object.keys(deviceType).length,
+        0
+      );
+    };
 
-		const formatFrequency = (frequency) => {
-			if (frequency >= 1000000) {
-				return `${(frequency / 1000000).toFixed(2)} MHz`;
-			}
-			if (frequency >= 1000) {
-				return `${(frequency / 1000).toFixed(2)} kHz`;
-			}
-			return `${frequency.toFixed(2)} Hz`;
-		};
+    const formatFrequency = (frequency) => {
+      if (frequency >= 1000000) {
+        return `${(frequency / 1000000).toFixed(2)} MHz`;
+      }
+      if (frequency >= 1000) {
+        return `${(frequency / 1000).toFixed(2)} kHz`;
+      }
+      return `${frequency.toFixed(2)} Hz`;
+    };
 
-		const toggleMessageType = (deviceId, type) => {
-			const key = `${deviceId}-${type}`;
-			expandedMessageTypes[key] = !expandedMessageTypes[key];
-		};
+    const toggleMessageType = (deviceId, type) => {
+      const key = `${deviceId}-${type}`;
+      expandedMessageTypes[key] = !expandedMessageTypes[key];
+    };
 
-		const sendMessage = () => {
-			if (
-				messageInput.value &&
-				socket.value &&
-				socket.value.readyState === WebSocket.OPEN
-			) {
-				socket.value.send(messageInput.value);
-				messageInput.value = "";
-			}
-		};
+    const sendMessage = () => {
+      if (messageInput.value && socket.value && socket.value.readyState === WebSocket.OPEN) {
+        socket.value.send(messageInput.value);
+        messageInput.value = '';
+      }
+    };
 
-		onMounted(() => {
-			connectWebSocket();
-		});
+    onMounted(() => {
+      connectWebSocket();
+    });
 
-		onUnmounted(() => {
-			if (socket.value) {
-				socket.value.close();
-			}
-		});
-		return {
-			view,
-			status,
-			messages,
-			messageInput,
-			messagesContainer,
-			organizedData,
-			expandedDevices,
-			autoScroll,
-			maxMessages,
-			sendMessage,
-			formatMessage,
-			toggleDevice,
-			toggleMessageContent,
-			isMessageContentExpanded,
-			getTotalMessageTypes,
-			formatFrequency,
-		};
-	},
+    onUnmounted(() => {
+      if (socket.value) {
+        socket.value.close();
+      }
+    });
+    return {
+      view,
+      status,
+      messages,
+      messageInput,
+      messagesContainer,
+      organizedData,
+      expandedDevices,
+      autoScroll,
+      maxMessages,
+      sendMessage,
+      formatMessage,
+      toggleDevice,
+      toggleMessageContent,
+      isMessageContentExpanded,
+      getTotalMessageTypes,
+      formatFrequency,
+    };
+  },
 };
 </script>

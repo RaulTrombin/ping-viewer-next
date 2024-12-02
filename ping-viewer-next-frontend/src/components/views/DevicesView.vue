@@ -54,20 +54,19 @@
 </template>
 
 <script setup>
-import { computed, inject, nextTick, onMounted, onUnmounted, ref } from "vue";
-import DeviceSettings from "../utils/DeviceManager.vue";
-import Ping1DLoader from "../widgets/sonar1d/Ping1DLoader.vue";
-import Ping360Loader from "../widgets/sonar360/Ping360Loader.vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import DeviceSettings from '../utils/DeviceManager.vue';
+import Ping1DLoader from '../widgets/sonar1d/Ping1DLoader.vue';
+import Ping360Loader from '../widgets/sonar360/Ping360Loader.vue';
 
 const props = defineProps({
-	serverUrl: {
-		type: String,
-		required: true,
-	},
+  serverUrl: {
+    type: String,
+    required: true,
+  },
 });
 
-const { commonSettings, ping1DSettings, ping360Settings } =
-	inject("deviceSettings");
+const { commonSettings, ping1DSettings, ping360Settings } = inject('deviceSettings');
 const componentContainer = ref(null);
 const contentContainer = ref(null);
 const deviceView = ref(null);
@@ -75,116 +74,112 @@ const selectedDevice = ref(null);
 const isComponentReady = ref(false);
 
 const componentDimensions = ref({
-	width: window.innerWidth * 0.8,
-	height: window.innerHeight * 0.7,
+  width: window.innerWidth * 0.8,
+  height: window.innerHeight * 0.7,
 });
 
 const deviceComponent = computed(() => {
-	if (!selectedDevice.value) return null;
-	return selectedDevice.value.device_type === "Ping360"
-		? Ping360Loader
-		: Ping1DLoader;
+  if (!selectedDevice.value) return null;
+  return selectedDevice.value.device_type === 'Ping360' ? Ping360Loader : Ping1DLoader;
 });
 
 const deviceSettings = computed(() => {
-	if (!selectedDevice.value) return {};
+  if (!selectedDevice.value) return {};
 
-	const settings =
-		selectedDevice.value.device_type === "Ping360"
-			? ping360Settings
-			: ping1DSettings;
+  const settings =
+    selectedDevice.value.device_type === 'Ping360' ? ping360Settings : ping1DSettings;
 
-	return {
-		...commonSettings,
-		...settings,
-		width: componentDimensions.value.width,
-		height: componentDimensions.value.height,
-	};
+  return {
+    ...commonSettings,
+    ...settings,
+    width: componentDimensions.value.width,
+    height: componentDimensions.value.height,
+  };
 });
 
 const containerStyle = computed(() => ({
-	width: `${componentDimensions.value.width}px`,
-	height: `${componentDimensions.value.height}px`,
-	maxWidth: "100%",
-	maxHeight: "100%",
+  width: `${componentDimensions.value.width}px`,
+  height: `${componentDimensions.value.height}px`,
+  maxWidth: '100%',
+  maxHeight: '100%',
 }));
 
 const getStatusColor = (status) => {
-	switch (status) {
-		case "ContinuousMode":
-			return "success";
-		case "Running":
-			return "info";
-		case "Error":
-			return "error";
-		default:
-			return "warning";
-	}
+  switch (status) {
+    case 'ContinuousMode':
+      return 'success';
+    case 'Running':
+      return 'info';
+    case 'Error':
+      return 'error';
+    default:
+      return 'warning';
+  }
 };
 
 const selectDevice = async (device) => {
-	isComponentReady.value = false;
-	selectedDevice.value = device;
+  isComponentReady.value = false;
+  selectedDevice.value = device;
 
-	await nextTick();
-	await new Promise((resolve) => setTimeout(resolve, 100));
+  await nextTick();
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
-	updateComponentDimensions();
-	isComponentReady.value = true;
+  updateComponentDimensions();
+  isComponentReady.value = true;
 };
 
 const backToDevices = () => {
-	isComponentReady.value = false;
-	selectedDevice.value = null;
+  isComponentReady.value = false;
+  selectedDevice.value = null;
 };
 
 const getWebSocketUrl = (device) => {
-	if (!device) return "";
-	const protocol = props.serverUrl.startsWith("https") ? "wss:" : "ws:";
-	const host = props.serverUrl.replace(/^https?:\/\//, "");
-	return `${protocol}//${host}/ws?device_number=${device.id}`;
+  if (!device) return '';
+  const protocol = props.serverUrl.startsWith('https') ? 'wss:' : 'ws:';
+  const host = props.serverUrl.replace(/^https?:\/\//, '');
+  return `${protocol}//${host}/ws?device_number=${device.id}`;
 };
 
 const updateComponentDimensions = () => {
-	if (!contentContainer.value) return;
+  if (!contentContainer.value) return;
 
-	const container = contentContainer.value;
-	const containerRect = container.getBoundingClientRect();
-	const padding = 32;
-	const availableWidth = containerRect.width - padding;
-	const availableHeight = containerRect.height - padding;
+  const container = contentContainer.value;
+  const containerRect = container.getBoundingClientRect();
+  const padding = 32;
+  const availableWidth = containerRect.width - padding;
+  const availableHeight = containerRect.height - padding;
 
-	const targetAspectRatio = 4 / 3;
+  const targetAspectRatio = 4 / 3;
 
-	let newWidth;
-	let newHeight;
+  let newWidth;
+  let newHeight;
 
-	if (availableWidth / availableHeight > targetAspectRatio) {
-		newHeight = availableHeight;
-		newWidth = availableHeight * targetAspectRatio;
-	} else {
-		newWidth = availableWidth;
-		newHeight = availableWidth / targetAspectRatio;
-	}
+  if (availableWidth / availableHeight > targetAspectRatio) {
+    newHeight = availableHeight;
+    newWidth = availableHeight * targetAspectRatio;
+  } else {
+    newWidth = availableWidth;
+    newHeight = availableWidth / targetAspectRatio;
+  }
 
-	componentDimensions.value = {
-		width: Math.floor(newWidth),
-		height: Math.floor(newHeight),
-	};
+  componentDimensions.value = {
+    width: Math.floor(newWidth),
+    height: Math.floor(newHeight),
+  };
 };
 
 const handleResize = () => {
-	if (selectedDevice.value) {
-		updateComponentDimensions();
-	}
+  if (selectedDevice.value) {
+    updateComponentDimensions();
+  }
 };
 
 onMounted(() => {
-	window.addEventListener("resize", handleResize);
+  window.addEventListener('resize', handleResize);
 });
 
 onUnmounted(() => {
-	window.removeEventListener("resize", handleResize);
+  window.removeEventListener('resize', handleResize);
 });
 </script>
 

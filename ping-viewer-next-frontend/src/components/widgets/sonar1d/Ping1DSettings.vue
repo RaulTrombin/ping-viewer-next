@@ -112,17 +112,17 @@
   </template>
 
   <script setup>
-import { computed, ref } from "vue";
+import { computed, ref } from 'vue';
 
 const props = defineProps({
-	serverUrl: {
-		type: String,
-		required: true,
-	},
-	deviceId: {
-		type: String,
-		required: true,
-	},
+  serverUrl: {
+    type: String,
+    required: true,
+  },
+  deviceId: {
+    type: String,
+    required: true,
+  },
 });
 
 const isOpen = ref(false);
@@ -130,146 +130,139 @@ const isSaving = ref(false);
 const rawAutoMode = ref(1);
 
 const isAutoMode = computed({
-	get: () => Boolean(rawAutoMode.value),
-	set: (value) => {
-		rawAutoMode.value = value ? 1 : 0;
-	},
+  get: () => Boolean(rawAutoMode.value),
+  set: (value) => {
+    rawAutoMode.value = value ? 1 : 0;
+  },
 });
 
 const settings = ref({
-	scan_start: 0,
-	scan_length: 10,
-	gain_setting: 0,
-	speed_of_sound: 1500,
+  scan_start: 0,
+  scan_length: 10,
+  gain_setting: 0,
+  speed_of_sound: 1500,
 });
 
 const gainOptions = [
-	{ title: "0.6", value: 0 },
-	{ title: "1.8", value: 1 },
-	{ title: "5.5", value: 2 },
-	{ title: "12.9", value: 3 },
-	{ title: "30.2", value: 4 },
-	{ title: "66.1", value: 5 },
-	{ title: "144", value: 6 },
+  { title: '0.6', value: 0 },
+  { title: '1.8', value: 1 },
+  { title: '5.5', value: 2 },
+  { title: '12.9', value: 3 },
+  { title: '30.2', value: 4 },
+  { title: '66.1', value: 5 },
+  { title: '144', value: 6 },
 ];
 
 const handleAutoModeChange = async () => {
-	await sendCommand("SetModeAuto", {
-		mode_auto: rawAutoMode.value,
-	});
+  await sendCommand('SetModeAuto', {
+    mode_auto: rawAutoMode.value,
+  });
 };
 
 const handleRangeChange = async () => {
-	await sendCommand("SetRange", {
-		scan_start: Math.round(settings.value.scan_start * 1000),
-		scan_length: Math.round(settings.value.scan_length * 1000),
-	});
+  await sendCommand('SetRange', {
+    scan_start: Math.round(settings.value.scan_start * 1000),
+    scan_length: Math.round(settings.value.scan_length * 1000),
+  });
 };
 
 const handleGainChange = async () => {
-	await sendCommand("SetGainSetting", {
-		gain_setting: settings.value.gain_setting,
-	});
+  await sendCommand('SetGainSetting', {
+    gain_setting: settings.value.gain_setting,
+  });
 };
 
 const handleSpeedOfSoundChange = async () => {
-	await sendCommand("SetSpeedOfSound", {
-		speed_of_sound: Math.round(settings.value.speed_of_sound * 1000),
-	});
+  await sendCommand('SetSpeedOfSound', {
+    speed_of_sound: Math.round(settings.value.speed_of_sound * 1000),
+  });
 };
 
 const fetchCurrentSettings = async () => {
-	try {
-		const settingsToFetch = [
-			"ModeAuto",
-			"Range",
-			"GainSetting",
-			"SpeedOfSound",
-		];
+  try {
+    const settingsToFetch = ['ModeAuto', 'Range', 'GainSetting', 'SpeedOfSound'];
 
-		for (const setting of settingsToFetch) {
-			const response = await sendCommand(setting);
-			if (response?.DeviceMessage?.PingMessage?.Ping1D) {
-				const data = response.DeviceMessage.PingMessage.Ping1D[setting];
+    for (const setting of settingsToFetch) {
+      const response = await sendCommand(setting);
+      if (response?.DeviceMessage?.PingMessage?.Ping1D) {
+        const data = response.DeviceMessage.PingMessage.Ping1D[setting];
 
-				switch (setting) {
-					case "ModeAuto":
-						rawAutoMode.value = data.mode_auto;
-						break;
-					case "Range":
-						settings.value.scan_start = data.scan_start / 1000;
-						settings.value.scan_length = data.scan_length / 1000;
-						break;
-					case "GainSetting":
-						settings.value.gain_setting = data.gain_setting;
-						break;
-					case "SpeedOfSound":
-						settings.value.speed_of_sound = Math.round(
-							data.speed_of_sound / 1000,
-						);
-						break;
-				}
-			}
-		}
-	} catch (error) {
-		console.error("Error fetching settings:", error);
-	}
+        switch (setting) {
+          case 'ModeAuto':
+            rawAutoMode.value = data.mode_auto;
+            break;
+          case 'Range':
+            settings.value.scan_start = data.scan_start / 1000;
+            settings.value.scan_length = data.scan_length / 1000;
+            break;
+          case 'GainSetting':
+            settings.value.gain_setting = data.gain_setting;
+            break;
+          case 'SpeedOfSound':
+            settings.value.speed_of_sound = Math.round(data.speed_of_sound / 1000);
+            break;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+  }
 };
 
 const sendCommand = async (command, payload = null) => {
-	try {
-		const requestBody = {
-			command: "Ping",
-			module: "DeviceManager",
-			payload: {
-				device_request: {
-					Ping1D: payload ? { [command]: payload } : command,
-				},
-				uuid: props.deviceId,
-			},
-		};
+  try {
+    const requestBody = {
+      command: 'Ping',
+      module: 'DeviceManager',
+      payload: {
+        device_request: {
+          Ping1D: payload ? { [command]: payload } : command,
+        },
+        uuid: props.deviceId,
+      },
+    };
 
-		const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Accept: "application/json",
-			},
-			body: JSON.stringify(requestBody),
-		});
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-		return await response.json();
-	} catch (error) {
-		console.error(`Error sending command ${command}:`, error);
-		return null;
-	}
+    return await response.json();
+  } catch (error) {
+    console.error(`Error sending command ${command}:`, error);
+    return null;
+  }
 };
 
 const saveSettings = async () => {
-	isSaving.value = true;
-	try {
-		await handleAutoModeChange();
-		if (!isAutoMode.value) {
-			await handleRangeChange();
-			await handleGainChange();
-		}
-		await handleSpeedOfSoundChange();
-		isOpen.value = false;
-	} catch (error) {
-		console.error("Error saving settings:", error);
-	} finally {
-		isSaving.value = false;
-	}
+  isSaving.value = true;
+  try {
+    await handleAutoModeChange();
+    if (!isAutoMode.value) {
+      await handleRangeChange();
+      await handleGainChange();
+    }
+    await handleSpeedOfSoundChange();
+    isOpen.value = false;
+  } catch (error) {
+    console.error('Error saving settings:', error);
+  } finally {
+    isSaving.value = false;
+  }
 };
 
 watch(isOpen, (newValue, oldValue) => {
-	if (newValue && !oldValue) {
-		fetchCurrentSettings();
-	}
+  if (newValue && !oldValue) {
+    fetchCurrentSettings();
+  }
 });
 </script>
 
