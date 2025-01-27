@@ -1,0 +1,41 @@
+name: Deploy PR previews
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+concurrency: preview-${{ github.ref }}
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: ping-viewer-next-frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and check
+        if: github.event.action != 'closed'
+        run: |
+          # Setup and install dependencies
+          curl -fsSL https://bun.sh/install | bash
+          bun install --frozen-lockfile
+
+          # Run checks
+          bunx biome format
+          bunx biome lint
+
+          # Build
+          bun run build
+
+      - name: Deploy preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./ping-viewer-next-frontend/dist
