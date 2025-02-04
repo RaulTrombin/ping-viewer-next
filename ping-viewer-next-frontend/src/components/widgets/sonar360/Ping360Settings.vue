@@ -19,7 +19,7 @@
         </div>
         <div class="d-flex align-center gap-2">
           <v-slider v-model="settings.gain_setting" :min="0" :max="2" :step="1" show-ticks="always" tick-size="3"
-            :ticks="{ 0: 'low', 1: 'normal', 2: 'high' }" density="compact" hide-details class="flex-grow-1" />
+            :ticks="{ 0: 'low', 1: 'normal', 2: 'high' }" density="compact" hide-details class="flex-grow-1" @update:modelValue="handleGainSettingChange" />
         </div>
 
         <div class="d-flex align-center justify-space-between mb-1 mt-4">
@@ -174,25 +174,18 @@
           </div>
           <div class="d-flex align-center gap-2 mb-8">
             <v-slider v-model="settings.transmit_frequency" :min="500" :max="1000" :step="1" density="compact"
-              hide-details class="flex-grow-1" />
+              hide-details class="flex-grow-1" @update:modelValue="handleTransmitFrequencyChange" />
             <v-text-field v-model.number="settings.transmit_frequency" type="number" :min="500" :max="1000" :step="1"
-              density="compact" hide-details style="width: 80px" />
+              density="compact" hide-details style="width: 80px" @update:modelValue="handleTransmitFrequencyChange" />
           </div>
         </div>
       </v-expand-transition>
-
-      <v-divider class="my-4"></v-divider>
-
-      <div class="d-flex justify-end -mb-1">
-        <v-btn color="primary" @click="saveSettings" :loading="isSaving" :disabled="isSaving || isLoading">
-          {{ isSaving ? 'Applying...' : 'Apply Settings' }}
-        </v-btn>
-      </div>
     </v-card-text>
   </v-card>
 </template>
 
 <script setup>
+import { useDebounceFn } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -214,7 +207,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:range', 'rangeChange', 'update:angles', 'update:isOpen']);
+const emit = defineEmits(['update:range', 'rangeChange', 'update:angles']);
 
 // Constants from Ping360 specs
 const SAMPLE_PERIOD_TICK_DURATION = 25e-9;
@@ -225,7 +218,6 @@ const MAX_NUMBER_OF_POINTS = 1200;
 const MIN_TRANSMIT_DURATION = 1;
 const MAX_TRANSMIT_DURATION = 1000;
 
-const isSaving = ref(false);
 const isLoading = ref(false);
 const showAdvanced = ref(false);
 const autoMode = ref(true);
@@ -252,6 +244,50 @@ const settings = ref({
   speed_of_sound: 1500,
 });
 
+const debouncedSaveSettings = useDebounceFn(async (updatedSettings) => {
+  if (isInitializing.value) {
+    return;
+  }
+
+  try {
+    const startGradians = degreesToGradians(angleRange.value[0]);
+    const endGradians = degreesToGradians(angleRange.value[1]);
+
+    const modifyCommand = {
+      command: 'ModifyDevice',
+      module: 'DeviceManager',
+      payload: {
+        uuid: props.deviceId,
+        modify: {
+          SetPing360Config: {
+            mode: 1,
+            ...updatedSettings,
+            start_angle: startGradians,
+            stop_angle: endGradians,
+            num_steps: 1,
+            delay: 10,
+          },
+        },
+      },
+    };
+
+    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(modifyCommand),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save settings');
+    }
+  } catch (error) {
+    console.error('Error saving settings:', error);
+  }
+}, 500);
+
 const transmitDurationMax = computed(() => {
   return Math.min(
     MAX_TRANSMIT_DURATION,
@@ -272,8 +308,12 @@ function gradiansToDegrees(gradians) {
   }
   return Math.round((gradians * 360) / 400);
 }
+
+const isInitializing = ref(true);
+
 const fetchCurrentSettings = async () => {
   isLoading.value = true;
+  isInitializing.value = true;
   try {
     const requestBody = {
       command: 'ModifyDevice',
@@ -322,10 +362,11 @@ const fetchCurrentSettings = async () => {
     console.error('Error fetching settings:', error);
   } finally {
     isLoading.value = false;
+    setTimeout(() => {
+      isInitializing.value = false;
+    }, 100);
   }
 };
-
-defineExpose({ fetchCurrentSettings });
 
 function calculateRange() {
   const samplePeriod = settings.value.sample_period * SAMPLE_PERIOD_TICK_DURATION;
@@ -361,10 +402,10 @@ function adjustTransmitDuration() {
     Math.max(MIN_TRANSMIT_DURATION, Math.min(transmitDurationMax.value, autoDuration))
   );
 }
-
-function handleAngleChange(newAngles) {
+const handleAngleChange = (newAngles) => {
   if (newAngles[0] === 0 && newAngles[1] === 360) {
     emit('update:angles', { startAngle: 0, endAngle: 360 });
+    debouncedSaveSettings({ ...settings.value });
     return;
   }
 
@@ -376,14 +417,9 @@ function handleAngleChange(newAngles) {
   };
 
   emit('update:angles', effectiveAngles);
-}
-
-function swapAngles() {
-  isSwapEnabled.value = !isSwapEnabled.value;
-  handleAngleChange(angleRange.value);
-}
-
-function handleRangeChange(newRange) {
+  debouncedSaveSettings({ ...settings.value });
+};
+const handleRangeChange = (newRange) => {
   if (!autoMode.value) {
     range.value = Number(newRange.toFixed(1));
     return;
@@ -417,141 +453,45 @@ function handleRangeChange(newRange) {
   range.value = Number(newRange.toFixed(1));
   emit('rangeChange', newRange);
   emit('update:range', newRange);
-}
 
-function handleSpeedOfSoundChange() {
+  debouncedSaveSettings({ ...settings.value });
+};
+
+const handleGainSettingChange = () => {
+  debouncedSaveSettings({ ...settings.value });
+};
+
+const handleSpeedOfSoundChange = () => {
   if (autoMode.value) {
     handleRangeChange(range.value);
   }
-}
+  debouncedSaveSettings({ ...settings.value });
+};
 
-function handleSamplePeriodChange() {
+const handleSamplePeriodChange = () => {
   if (!autoMode.value) {
     range.value = calculateRange();
   }
-}
+  debouncedSaveSettings({ ...settings.value });
+};
 
-function handleNumberOfSamplesChange() {
+const handleNumberOfSamplesChange = () => {
   if (!autoMode.value) {
     range.value = calculateRange();
   }
-}
+  debouncedSaveSettings({ ...settings.value });
+};
 
-function handleTransmitDurationChange() {
+const handleTransmitDurationChange = () => {
   if (!autoMode.value && settings.value.transmit_duration > transmitDurationMax.value) {
     settings.value.transmit_duration = transmitDurationMax.value;
   }
-}
-
-const sendCommand = async (command, payload = null) => {
-  try {
-    const requestBody = {
-      command: 'Ping',
-      module: 'DeviceManager',
-      payload: {
-        device_request: {
-          Ping360: payload ? { [command]: payload } : command,
-        },
-        uuid: props.deviceId,
-      },
-    };
-
-    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error sending command ${command}:`, error);
-    return null;
-  }
+  debouncedSaveSettings({ ...settings.value });
 };
 
-const saveSettings = async () => {
-  isSaving.value = true;
-  try {
-    let startGradians;
-    let endGradians;
-
-    if (angleRange.value[0] === 0 && angleRange.value[1] === 360) {
-      startGradians = 0;
-      endGradians = 399;
-    } else {
-      startGradians = degreesToGradians(angleRange.value[0]);
-      endGradians = degreesToGradians(angleRange.value[1]);
-    }
-
-    const modifyCommand = {
-      command: 'ModifyDevice',
-      module: 'DeviceManager',
-      payload: {
-        uuid: props.deviceId,
-        modify: {
-          SetPing360Config: {
-            mode: 1,
-            gain_setting: settings.value.gain_setting,
-            transmit_duration: settings.value.transmit_duration,
-            sample_period: settings.value.sample_period,
-            transmit_frequency: settings.value.transmit_frequency,
-            number_of_samples: settings.value.number_of_samples,
-            start_angle: startGradians,
-            stop_angle: endGradians,
-            num_steps: 1,
-            delay: 10,
-          },
-        },
-      },
-    };
-
-    const response = await fetch(`${props.serverUrl}/device_manager/request`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(modifyCommand),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    emit('update:isOpen', false);
-  } catch (error) {
-    console.error('Error saving settings:', error);
-  } finally {
-    isSaving.value = false;
-  }
+const handleTransmitFrequencyChange = () => {
+  debouncedSaveSettings({ ...settings.value });
 };
-
-watch(autoMode, (newValue) => {
-  if (newValue) {
-    handleRangeChange(range.value);
-  }
-});
-
-watch(
-  [
-    () => settings.value.sample_period,
-    () => settings.value.number_of_samples,
-    () => settings.value.speed_of_sound,
-  ],
-  () => {
-    if (autoMode.value) {
-      handleRangeChange(range.value);
-    }
-  },
-  { deep: true }
-);
 
 watch(
   angleRange,
@@ -605,6 +545,8 @@ onMounted(async () => {
     await fetchCurrentSettings();
   }
 });
+
+defineExpose({ fetchCurrentSettings });
 </script>
 
 <style>
