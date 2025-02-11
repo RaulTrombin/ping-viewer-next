@@ -16,6 +16,8 @@ RUN chmod +x /entrypoint.sh && \
     rm /ping-viewer-next.*
 LABEL version="0.0.0"
 
+USER 1000:1000
+
 # Add docker configuration
 LABEL permissions='{\
   "ExposedPorts": {\
