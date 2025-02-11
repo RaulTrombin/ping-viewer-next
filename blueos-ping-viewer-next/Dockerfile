@@ -16,6 +16,9 @@ RUN chmod +x /entrypoint.sh && \
     rm /ping-viewer-next.*
 LABEL version="0.0.0"
 
+RUN mkdir -p /app
+RUN mv /ping-viewer-next /app/ping-viewer-next
+
 USER 1000:1000
 
 # Add docker configuration
