@@ -1,5 +1,5 @@
 FROM alpine:3.18
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash shadow
 
 COPY ./blueos-ping-viewer-next/files/ping-viewer-next.* /
 COPY ./blueos-ping-viewer-next/files/entrypoint.sh /
@@ -18,21 +18,18 @@ RUN chmod +x /entrypoint.sh && \
 LABEL version="0.0.0"
 
 RUN addgroup -g 1000 pingviewer && adduser -G pingviewer -u 1000 pingviewer -D
-RUN chown -R pingviewer:pingviewer /app
-RUN chmod -R 755 /app/logs
-USER 1000:1000
 
 # Add docker configuration
 LABEL permissions='{\
   "ExposedPorts": {\
     "6060/tcp": {}\
   },\
-  "Binds": [\
-  "/var/logs/blueos/services/ping-viewer-next/logs:/app/logs"\
-  ],\
   "HostConfig": {\
     "Privileged": true,\
-    "NetworkMode": "host"\
+    "NetworkMode": "host",\
+    "Binds": [\
+       "/usr/blueos/userdata/extensions/pingviewernext/logs:/app/logs"\
+    ]\
   }\
 }'
 LABEL authors='[\
