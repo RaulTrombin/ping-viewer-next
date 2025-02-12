@@ -4,7 +4,7 @@ RUN apk add --no-cache bash
 COPY ./blueos-ping-viewer-next/files/ping-viewer-next.* /
 COPY ./blueos-ping-viewer-next/files/entrypoint.sh /
 
-RUN mkdir -p /app
+RUN mkdir -p /app/logs
 RUN chmod +x /entrypoint.sh && \
     if [ "$(uname -m)" = "aarch64" ]; then \
         cp /ping-viewer-next.aarch64 /app/ping-viewer-next; \
@@ -18,7 +18,8 @@ RUN chmod +x /entrypoint.sh && \
 LABEL version="0.0.0"
 
 RUN addgroup -g 1000 pingviewer && adduser -G pingviewer -u 1000 pingviewer -D
-RUN chown pingviewer:pingviewer /app
+RUN chown -R pingviewer:pingviewer /app
+RUN chmod -R 755 /app/logs
 USER 1000:1000
 
 # Add docker configuration
@@ -26,6 +27,9 @@ LABEL permissions='{\
   "ExposedPorts": {\
     "6060/tcp": {}\
   },\
+  "Binds": [\
+  "/var/logs/blueos/services/ping-viewer-next/logs:/app/logs"\
+  ],\
   "HostConfig": {\
     "Privileged": true,\
     "NetworkMode": "host"\
