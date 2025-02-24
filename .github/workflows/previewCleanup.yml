@@ -1,0 +1,35 @@
+name: Preview Cleanup
+
+permissions:
+  contents: write
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create empty directory
+        run: mkdir -p empty_dir
+
+      - name: Set URL slug
+        run: |
+          echo "URL_SLUG=${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+
+      - name: Remove preview deployment
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: empty_dir
+          repository-name: ${{ github.repository_owner }}/pr-preview
+          branch: 'gh-pages'
+          clean: true
+          target-folder: pr/${{ env.URL_SLUG }}
+          token: ${{ secrets.GITHUB_TOKEN }} 
+          commit-message: "Remove preview for PR ${{ env.URL_SLUG }}"
+          single-commit: true
