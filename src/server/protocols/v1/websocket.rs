@@ -238,7 +238,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RecordingStatusAc
         let addr = ctx.address();
         let mut subscriber = self.recording_subscriber.resubscribe();
         let device_number = self.device_number;
+        let manager_handler = self.manager_handler.clone();
 
+        // Send current recording sessions
+        let addr_clone = addr.clone();
+        tokio::spawn(async move {
+            if let Ok(Answer::RecordingManager(manager)) = manager_handler.send(Request::GetRecordingManager).await {
+                let sessions = manager.get_all_recording_status().await;
+                for session in sessions {
+                    if device_number.is_none() || device_number == Some(session.device_id) {
+                        let _ = addr_clone.do_send(StringMessage(serde_json::to_string(&session).unwrap()));
+                    }
+                }
+            }
+        });
+
+        // Handle future updates
         tokio::spawn(async move {
             while let Ok(session) = subscriber.recv().await {
                 if device_number.is_none() || device_number == Some(session.device_id) {
