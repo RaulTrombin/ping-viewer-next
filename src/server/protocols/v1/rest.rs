@@ -107,6 +107,7 @@ pub enum DeviceManagerGetOptionsV1 {
     AutoCreate,
     List,
     Search,
+    GetAllRecordingStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
@@ -115,6 +116,9 @@ pub enum DeviceManagerPostOptionsV1 {
     Info,
     EnableContinuousMode,
     DisableContinuousMode,
+    StartRecording,
+    StopRecording,
+    GetRecordingStatus,
 }
 
 #[api_v2_operation(tags("Device Manager"))]
@@ -127,6 +131,9 @@ async fn device_manager_get(
         DeviceManagerGetOptionsV1::AutoCreate => crate::device::manager::Request::AutoCreate,
         DeviceManagerGetOptionsV1::List => crate::device::manager::Request::List,
         DeviceManagerGetOptionsV1::Search => crate::device::manager::Request::Search,
+        DeviceManagerGetOptionsV1::GetAllRecordingStatus => {
+            crate::device::manager::Request::GetAllRecordingStatus
+        }
     };
 
     send_request_and_broadcast(&manager_handler, request).await
@@ -167,6 +174,15 @@ async fn device_manager_post(
         }
         DeviceManagerPostOptionsV1::DisableContinuousMode => {
             crate::device::manager::Request::DisableContinuousMode(UuidWrapper { uuid })
+        }
+        DeviceManagerPostOptionsV1::StartRecording => {
+            crate::device::manager::Request::StartRecording(uuid)
+        }
+        DeviceManagerPostOptionsV1::StopRecording => {
+            crate::device::manager::Request::StopRecording(uuid)
+        }
+        DeviceManagerPostOptionsV1::GetRecordingStatus => {
+            crate::device::manager::Request::GetRecordingStatus(uuid)
         }
     };
 

@@ -28,6 +28,7 @@ use udp_stream::UdpStream;
 use uuid::Uuid;
 
 use super::devices::{DeviceActor, DeviceActorHandler, DeviceType, PingAnswer};
+use super::recording::{RecordingManager, RecordingSession};
 use bluerobotics_ping::{
     common::{DeviceInformationStruct, ProtocolVersionStruct},
     device::{Ping1D, Ping360},
@@ -164,6 +165,7 @@ pub struct DeviceManager {
     pub device: HashMap<Uuid, Device>,
     discovery_service: DiscoveryComponent,
     pub manager_handler: ManagerActorHandler,
+    recording_manager: RecordingManager,
 }
 
 #[derive(Debug)]
@@ -181,8 +183,13 @@ pub enum Answer {
     DeviceMessage(DeviceAnswer),
     #[serde(skip)]
     InnerDeviceHandler(DeviceActorHandler),
+    #[serde(skip)]
+    RecordingManager(RecordingManager),
     DeviceInfo(Vec<DeviceInfo>),
     DeviceConfig(ModifyDeviceResult),
+    RecordingSession(RecordingSession),
+    RecordingStatus(Option<RecordingSession>),
+    AllRecordingStatus(Vec<RecordingSession>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -221,6 +228,12 @@ pub enum Request {
     DisableContinuousMode(UuidWrapper),
     #[serde(skip)]
     SpecialTurnOffContinuousMode(UuidWrapper),
+    StartRecording(Uuid),
+    StopRecording(Uuid),
+    GetRecordingStatus(Uuid),
+    GetAllRecordingStatus,
+    #[serde(skip)]
+    GetRecordingManager,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Apiv2Schema)]
@@ -330,6 +343,48 @@ impl DeviceManager {
                     error!("DeviceManager: Failed to return ModifyDevice response: {err:?}");
                 }
             }
+            Request::StartRecording(device_id) => {
+                let result = self
+                    .start_recording(device_id)
+                    .await
+                    .map(Answer::RecordingSession);
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!("DeviceManager: Failed to return StartRecording response: {e:?}");
+                }
+            }
+            Request::StopRecording(device_id) => {
+                let result = self
+                    .stop_recording(device_id)
+                    .await
+                    .map(Answer::RecordingSession);
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!("DeviceManager: Failed to return StopRecording response: {e:?}");
+                }
+            }
+            Request::GetRecordingStatus(device_id) => {
+                let result = self
+                    .get_recording_status(device_id)
+                    .await
+                    .map(Answer::RecordingStatus);
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!("DeviceManager: Failed to return GetRecordingStatus response: {e:?}");
+                }
+            }
+            Request::GetAllRecordingStatus => {
+                let result = self
+                    .get_all_recording_status()
+                    .await
+                    .map(Answer::AllRecordingStatus);
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!("DeviceManager: Failed to return GetAllRecordingStatus response: {e:?}");
+                }
+            }
+            Request::GetRecordingManager => {
+                let result = Ok(Answer::RecordingManager(self.recording_manager.clone()));
+                if let Err(e) = actor_request.respond_to.send(result) {
+                    error!("DeviceManager: Failed to return GetRecordingManager response: {e:?}");
+                }
+            }
             _ => {
                 if let Err(e) = actor_request
                     .respond_to
@@ -350,6 +405,7 @@ impl DeviceManager {
             device: HashMap::new(),
             discovery_service: DiscoveryComponent::new(),
             manager_handler: actor_handler.clone(),
+            recording_manager: RecordingManager::new("recordings"),
         };
 
         trace!("DeviceManager and handler successfully created: Success");
@@ -1198,6 +1254,36 @@ impl DeviceManager {
             .map_err(|err| ManagerError::Other(err.to_string()))?;
         Ok(())
     }
+
+    pub async fn start_recording(&self, device_id: Uuid) -> Result<RecordingSession, ManagerError> {
+        self.recording_manager
+            .start_recording(self, device_id)
+            .await
+    }
+
+    pub async fn stop_recording(&self, device_id: Uuid) -> Result<RecordingSession, ManagerError> {
+        self.recording_manager.stop_recording(device_id).await
+    }
+
+    pub async fn get_recording_status(
+        &self,
+        device_id: Uuid,
+    ) -> Result<Option<RecordingSession>, ManagerError> {
+        self.recording_manager.get_recording_status(device_id).await
+    }
+
+    pub async fn get_all_recording_status(&self) -> Result<Vec<RecordingSession>, ManagerError> {
+        Ok(self.recording_manager.get_all_recording_status().await)
+    }
+
+    // pub async fn get_recording_manager(&self) -> Result<RecordingManager, ManagerError> {
+    //     let (tx, rx) = oneshot::channel();
+    //     let _ = self.manager_handler.sender.blocking_send(ManagerActorRequest {
+    //         request: Request::GetRecordingManager,
+    //         respond_to: tx,
+    //     });
+    //     rx.try_recv()
+    // }
 }
 
 impl ManagerActorHandler {

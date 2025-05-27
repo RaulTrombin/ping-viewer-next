@@ -14,10 +14,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::device::manager::{ManagerActorHandler, Request};
+use crate::device::manager::{Answer, ManagerActorHandler, Request};
 
 pub struct StringMessage(String);
 
@@ -198,6 +199,64 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebsocketActor {
     }
 }
 
+pub struct RecordingStatusActor {
+    pub device_number: Option<Uuid>,
+    pub manager_handler: web::Data<ManagerActorHandler>,
+    recording_subscriber: broadcast::Receiver<crate::device::recording::RecordingSession>,
+}
+
+impl RecordingStatusActor {
+    pub fn new(
+        device_number: Option<Uuid>,
+        manager_handler: web::Data<ManagerActorHandler>,
+        recording_subscriber: broadcast::Receiver<crate::device::recording::RecordingSession>,
+    ) -> Self {
+        Self {
+            device_number,
+            manager_handler,
+            recording_subscriber,
+        }
+    }
+}
+
+impl Actor for RecordingStatusActor {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+impl Handler<StringMessage> for RecordingStatusActor {
+    type Result = ();
+
+    fn handle(&mut self, message: StringMessage, ctx: &mut Self::Context) {
+        ctx.text(message.0);
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RecordingStatusActor {
+    fn started(&mut self, ctx: &mut Self::Context) {
+        info!("RecordingStatusActor: Starting websocket client");
+
+        let addr = ctx.address();
+        let mut subscriber = self.recording_subscriber.resubscribe();
+        let device_number = self.device_number;
+
+        tokio::spawn(async move {
+            while let Ok(session) = subscriber.recv().await {
+                if device_number.is_none() || device_number == Some(session.device_id) {
+                    let _ = addr.do_send(StringMessage(serde_json::to_string(&session).unwrap()));
+                }
+            }
+        });
+    }
+
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Close(msg)) => ctx.close(msg),
+            _ => (),
+        }
+    }
+}
+
 #[api_v2_operation(skip)]
 #[get("ws")]
 pub async fn websocket(
@@ -232,6 +291,50 @@ pub async fn websocket(
 
     ws::start(
         WebsocketActor::new(filter, device_number, manager_handler.clone()),
+        &req,
+        stream,
+    )
+}
+
+#[api_v2_operation(skip)]
+#[get("ws/recording")]
+pub async fn recording_websocket(
+    req: HttpRequest,
+    query: web::Query<WebsocketQuery>,
+    stream: web::Payload,
+    manager_handler: web::Data<ManagerActorHandler>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let query_inner = query.into_inner();
+    let device_number = query_inner.device_number;
+
+    if let Some(device_number) = device_number {
+        let request = crate::device::manager::Request::Info(crate::device::manager::UuidWrapper {
+            uuid: device_number,
+        });
+        match manager_handler.send(request).await {
+            Ok(response) => {
+                info!(
+                    "RecordingStatusActor: Received websocket request connection for device: {response:?}"
+                );
+            }
+            Err(err) => {
+                return Ok(HttpResponse::InternalServerError().json(json!(err)));
+            }
+        }
+    }
+
+    let recording_manager = match manager_handler.send(Request::GetRecordingManager).await {
+        Ok(Answer::RecordingManager(manager)) => manager,
+        _ => {
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to get recording manager"
+            })))
+        }
+    };
+    let subscriber = recording_manager.subscribe();
+
+    ws::start(
+        RecordingStatusActor::new(device_number, manager_handler.clone(), subscriber),
         &req,
         stream,
     )

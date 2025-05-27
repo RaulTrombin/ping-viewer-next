@@ -34,6 +34,7 @@ pub async fn run(server_address: &str, handler: ManagerActorHandler) -> std::io:
             .service(v1)
             .service(protocols::v1::rest::server_metadata)
             .service(protocols::v1::websocket::websocket)
+            .service(protocols::v1::websocket::recording_websocket)
             .service(default)
             .build()
     });
