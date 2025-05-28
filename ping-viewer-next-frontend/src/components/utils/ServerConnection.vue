@@ -210,27 +210,10 @@ const confirmConnection = () => {
 };
 
 const checkBlueOSVersion = async () => {
-  try {
-    const versionUrl = `${location.protocol}//${location.hostname}:8081/v1.0/version/current`;
-    const response = await fetch(versionUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
 
-    if (response.ok) {
-      const versionData = await response.json();
-      return {
-        success: true,
-        data: versionData,
-      };
-    }
-    return { success: false };
-  } catch (error) {
-    console.error('Version endpoint check failed:', error);
-    return { success: false };
-  }
+  // If we get here, none of the combinations worked
+  console.log('Could not connect to BlueOS version endpoint');
+  return { success: false };
 };
 
 onMounted(async () => {
