@@ -93,7 +93,7 @@
                           <v-list-item-subtitle>Start device data stream</v-list-item-subtitle>
                         </v-list-item>
 
-                        <v-divider class="my-2"></v-divider>
+                        <v-divider v-if="isDeviceRecording(device.id) || (device.status === 'ContinuousMode' || device.status === 'Running')" class="my-2"></v-divider>
 
                         <v-list-item v-if="isDeviceRecording(device.id)" @click="stopRecording(device.id)"
                           :disabled="loadingStates[device.id]">
@@ -104,7 +104,9 @@
                           <v-list-item-subtitle>Stop recording device data</v-list-item-subtitle>
                         </v-list-item>
 
-                        <v-list-item v-else @click="startRecording(device.id)" :disabled="loadingStates[device.id]">
+                        <v-list-item v-else-if="device.status === 'ContinuousMode' || device.status === 'Running'"
+                          @click="startRecording(device.id)"
+                          :disabled="loadingStates[device.id]">
                           <template v-slot:prepend>
                             <v-icon color="success">mdi-record</v-icon>
                           </template>
@@ -112,7 +114,8 @@
                           <v-list-item-subtitle>Start recording device data</v-list-item-subtitle>
                         </v-list-item>
 
-                        <v-divider class="my-2"></v-divider>
+                        <v-divider v-if="isDeviceRecording(device.id) || (device.status === 'ContinuousMode' || device.status === 'Running')" class="my-2"></v-divider>
+                        <v-divider v-else class="my-2"></v-divider>
 
                         <v-list-item @click="confirmDelete(device)" :disabled="loadingStates[device.id]">
                           <template v-slot:prepend>
@@ -226,7 +229,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref, inject, watch } from 'vue';
 import { useRecordingSessions } from '@/composables/useRecordingSessions';
 
 const props = defineProps({
@@ -258,7 +261,47 @@ const deviceToDelete = ref(null);
 const error = ref(null);
 const loadingStates = ref({});
 
-const { isDeviceRecording, getRecordingSession } = useRecordingSessions(props.serverUrl);
+const wsManager = inject('wsManager');
+const recordingSessions = inject('recordingSessions');
+
+const isDeviceRecording = (deviceId) => {
+  const session = recordingSessions.value.get(deviceId);
+  return session?.is_active || false;
+};
+
+const getRecordingSession = (deviceId) => {
+  return recordingSessions.value.get(deviceId);
+};
+
+const fetchInitialRecordingStatuses = async () => {
+  try {
+    const response = await fetch(`${props.serverUrl}/v1/device_manager/GetAllRecordingStatus`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording statuses');
+    }
+    const data = await response.json();
+    if (data.AllRecordingStatus) {
+      recordingSessions.value.clear();
+      data.AllRecordingStatus.forEach(session => {
+        recordingSessions.value.set(session.device_id, session);
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching initial recording statuses:', err);
+  }
+};
+
+// Watch for isOpen changes to fetch initial statuses
+watch(() => props.isOpen, async (newValue) => {
+  if (newValue) {
+    await fetchInitialRecordingStatuses();
+  }
+});
+
+// Also fetch when component is mounted
+onMounted(async () => {
+  await fetchInitialRecordingStatuses();
+});
 
 const newDevice = ref({
   device_selection: 'Auto',
@@ -447,14 +490,11 @@ const disableContinuousMode = async (deviceId) => {
 const startRecording = async (deviceId) => {
   loadingStates.value[deviceId] = true;
   try {
-    const response = await fetch(`${props.serverUrl}/recordings/start`, {
+    const response = await fetch(`${props.serverUrl}/device_manager/${deviceId}/StartRecording`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        device_id: deviceId,
-      }),
     });
 
     if (!response.ok) {
@@ -471,14 +511,11 @@ const startRecording = async (deviceId) => {
 const stopRecording = async (deviceId) => {
   loadingStates.value[deviceId] = true;
   try {
-    const response = await fetch(`${props.serverUrl}/recordings/stop`, {
+    const response = await fetch(`${props.serverUrl}/device_manager/${deviceId}/StopRecording`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        device_id: deviceId,
-      }),
     });
 
     if (!response.ok) {

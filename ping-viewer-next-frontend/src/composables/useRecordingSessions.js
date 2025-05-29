@@ -1,164 +1,123 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useNotificationStore } from '@/stores/notificationStore';
 
-export function useRecordingSessions(serverUrl) {
-  const recordingSessions = ref(new Map());
-  const ws = ref(null);
-  const isConnected = ref(false);
-  const error = ref(null);
-  const notificationStore = useNotificationStore();
-  const reconnectAttempts = ref(0);
+// WebSocket manager singleton
+const createWebSocketManager = () => {
+  let ws = null;
+  let reconnectTimeout = null;
+  let reconnectAttempts = 0;
   const maxReconnectAttempts = 5;
-  const reconnectTimeout = ref(null);
-  const lastNotificationTime = ref(0);
-  const NOTIFICATION_COOLDOWN = 30000; // 30 seconds between notifications
+  const listeners = new Set();
+  let currentUrl = null;
 
-  const getWebSocketUrl = (url) => {
-    try {
-      // Remove any existing protocol
-      const cleanUrl = url.replace(/^https?:\/\//, '');
-      // Ensure we have a valid URL
-      const wsUrl = `ws://${cleanUrl}/ws/recording`;
-      console.log('Attempting to connect to WebSocket:', wsUrl);
-      return wsUrl;
-    } catch (err) {
-      console.error('Error constructing WebSocket URL:', err);
-      throw new Error('Invalid server URL format');
+  const connect = (url) => {
+    if (ws?.readyState === WebSocket.OPEN) {
+      return;
     }
-  };
 
-  const showNotification = (notification) => {
-    const now = Date.now();
-    if (now - lastNotificationTime.value > NOTIFICATION_COOLDOWN) {
-      notificationStore.addNotification(notification);
-      lastNotificationTime.value = now;
-    }
-  };
-
-  const connect = () => {
-    if (ws.value?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
-      return; // Already connected
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
     }
 
     try {
-      const wsUrl = getWebSocketUrl(serverUrl);
+      currentUrl = url;
+      const wsUrl = `ws://${url.replace(/^https?:\/\//, '')}/ws/recording`;
       console.log('Creating WebSocket connection to:', wsUrl);
-      
-      ws.value = new WebSocket(wsUrl);
-      
-      ws.value.onopen = () => {
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
         console.log('Recording sessions WebSocket connected successfully');
-        isConnected.value = true;
-        error.value = null;
-        reconnectAttempts.value = 0;
-        showNotification({
-          title: 'Connected',
-          message: 'Recording service connected successfully',
-          icon: 'mdi-wifi',
-          color: 'success',
-        });
+        reconnectAttempts = 0;
       };
 
-      ws.value.onmessage = (event) => {
+      ws.onmessage = (event) => {
         try {
-          const session = JSON.parse(event.data);
-          console.log('Received recording session:', session);
-          
-          // Update the recording sessions map
-          if (session.device_id) {
-            const previousSession = recordingSessions.value.get(session.device_id);
-            recordingSessions.value.set(session.device_id, session);
-
-            // Show notification for recording status changes
-            if (!previousSession && session.is_active) {
-              showNotification({
-                title: 'Recording Started',
-                message: `Recording started for device ${session.device_id}`,
-                icon: 'mdi-record',
-                color: 'success',
-              });
-            } else if (previousSession?.is_active && !session.is_active) {
-              showNotification({
-                title: 'Recording Stopped',
-                message: `Recording stopped for device ${session.device_id}`,
-                icon: 'mdi-stop',
-                color: 'error',
-              });
-            }
-          }
+          const data = JSON.parse(event.data);
+          listeners.forEach(listener => listener(data));
         } catch (err) {
-          console.error('Error parsing recording session:', err);
-          error.value = 'Failed to parse recording session data';
+          console.error('Error parsing WebSocket message:', err);
         }
       };
 
-      ws.value.onerror = (event) => {
-        console.error('Recording sessions WebSocket error:', {
-          event,
-          readyState: ws.value?.readyState,
-          url: wsUrl
-        });
-        error.value = 'WebSocket connection error';
-        isConnected.value = false;
+      ws.onerror = (event) => {
+        console.error('WebSocket error:', event);
       };
 
-      ws.value.onclose = (event) => {
-        console.log('Recording sessions WebSocket disconnected:', {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean,
-          url: wsUrl
-        });
-        isConnected.value = false;
-
-        // Only attempt to reconnect if we haven't exceeded max attempts
-        if (reconnectAttempts.value < maxReconnectAttempts) {
-          reconnectAttempts.value++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000); // Exponential backoff, max 30s
-          
-          console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`);
-          
-          showNotification({
-            title: 'Connection Lost',
-            message: `Recording service connection lost. Attempting to reconnect (${reconnectAttempts.value}/${maxReconnectAttempts})...`,
-            icon: 'mdi-wifi-off',
-            color: 'warning',
-          });
-
-          reconnectTimeout.value = setTimeout(connect, delay);
-        } else {
-          console.error('Max reconnection attempts reached');
-          showNotification({
-            title: 'Connection Failed',
-            message: 'Failed to connect to recording service after multiple attempts. Please check if the server is running and refresh the page.',
-            icon: 'mdi-wifi-off',
-            color: 'error',
-          });
+      ws.onclose = () => {
+        if (reconnectAttempts < maxReconnectAttempts && currentUrl) {
+          reconnectTimeout = setTimeout(() => {
+            reconnectAttempts++;
+            connect(currentUrl);
+          }, 5000);
         }
       };
     } catch (err) {
       console.error('Error creating WebSocket connection:', err);
-      error.value = 'Failed to create WebSocket connection';
-      isConnected.value = false;
-      showNotification({
-        title: 'Connection Error',
-        message: 'Failed to connect to recording service. Please check if the server is running.',
-        icon: 'mdi-wifi-off',
-        color: 'error',
-      });
     }
   };
 
   const disconnect = () => {
-    if (ws.value) {
-      console.log('Disconnecting WebSocket');
-      ws.value.close();
-      ws.value = null;
+    if (ws) {
+      ws.close();
+      ws = null;
     }
-    if (reconnectTimeout.value) {
-      clearTimeout(reconnectTimeout.value);
-      reconnectTimeout.value = null;
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+    currentUrl = null;
+    listeners.clear();
+  };
+
+  const addListener = (listener) => {
+    listeners.add(listener);
+    // If we have a URL but no connection, try to connect
+    if (currentUrl && (!ws || ws.readyState !== WebSocket.OPEN)) {
+      connect(currentUrl);
+    }
+  };
+
+  const removeListener = (listener) => {
+    listeners.delete(listener);
+    // Only disconnect if there are no more listeners
+    if (listeners.size === 0) {
+      disconnect();
+    }
+  };
+
+  return {
+    connect,
+    disconnect,
+    addListener,
+    removeListener
+  };
+};
+
+// Create a single instance of the WebSocket manager
+const wsManager = createWebSocketManager();
+
+export function useRecordingSessions(serverUrl, wsManagerInstance = wsManager) {
+  const recordingSessions = ref(new Map());
+  const isConnected = ref(false);
+  const error = ref(null);
+
+  const fetchInitialRecordingStatuses = async () => {
+    try {
+      const response = await fetch(`${serverUrl}/v1/device_manager/GetAllRecordingStatus`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch recording statuses');
+      }
+      const data = await response.json();
+      if (data.AllRecordingStatus) {
+        data.AllRecordingStatus.forEach(session => {
+          recordingSessions.value.set(session.device_id, session);
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching initial recording statuses:', err);
+      error.value = 'Failed to fetch initial recording statuses';
     }
   };
 
@@ -172,20 +131,22 @@ export function useRecordingSessions(serverUrl) {
   };
 
   onMounted(() => {
-    connect();
+    wsManagerInstance.connect(serverUrl);
+    fetchInitialRecordingStatuses();
   });
 
   onUnmounted(() => {
-    disconnect();
+    // No need to remove listener since we're not adding one
   });
 
   return {
-    recordingSessions,
-    isConnected,
-    error,
     isDeviceRecording,
     getRecordingSession,
-    connect,
-    disconnect
+    recordingSessions,
+    isConnected,
+    error
   };
 }
+
+// Export the WebSocket manager for use in Main.vue
+export { wsManager };

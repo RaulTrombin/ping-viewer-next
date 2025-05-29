@@ -10,13 +10,10 @@ export const useNotificationStore = defineStore('notifications', () => {
     notifications.value.push({
       id,
       ...notification,
+      read: false,
       timestamp: new Date(),
+      device_type: notification.device_type || 'unknown',
     });
-
-    // Auto-remove notification after 5 seconds
-    setTimeout(() => {
-      removeNotification(id);
-    }, 5000);
   };
 
   const removeNotification = (id) => {
@@ -30,10 +27,25 @@ export const useNotificationStore = defineStore('notifications', () => {
     notifications.value = [];
   };
 
+  const markAsRead = (id) => {
+    const notification = notifications.value.find(n => n.id === id);
+    if (notification) {
+      notification.read = true;
+    }
+  };
+
+  const markAllAsRead = () => {
+    notifications.value.forEach(notification => {
+      notification.read = true;
+    });
+  };
+
   return {
     notifications,
     addNotification,
     removeNotification,
     clearNotifications,
+    markAsRead,
+    markAllAsRead,
   };
 }); 

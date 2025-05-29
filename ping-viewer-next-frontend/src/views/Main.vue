@@ -174,9 +174,32 @@
           </v-badge>
         </v-btn>
 
-        <v-btn class="bottom-right-button square-button" :class="{ glass }">
-          <v-icon icon="mdi-bell" :size="iconSize" :color="iconColor" />
+        <v-btn class="bottom-right-button square-button" :class="{ glass }" @click="showNotifications = !showNotifications">
+          <v-badge
+            v-if="unreadCount > 0"
+            :content="unreadCount"
+            color="error"
+            location="top end"
+            offset-x="-6"
+            offset-y="-6"
+          >
+            <v-icon icon="mdi-bell" :size="iconSize" :color="iconColor" />
+          </v-badge>
+          <v-icon v-else icon="mdi-bell" :size="iconSize" :color="iconColor" />
         </v-btn>
+
+        <v-card class="notification-menu-wrapper" :class="{ 'glass': glass }" v-if="showNotifications">
+          <div class="d-flex justify-space-between align-center px-4 pt-4">
+            <div class="text-h6">Notifications</div>
+            <v-btn icon="mdi-close" variant="text" @click="showNotifications = false" />
+          </div>
+          <NotificationMenu
+            :glass="glass"
+            :icon-size="iconSize"
+            :is-open="showNotifications"
+            @update:is-open="showNotifications = $event"
+          />
+        </v-card>
 </template>
 
 <script setup>
@@ -203,6 +226,9 @@ import Ping1DSettings from '../components/widgets/sonar1d/Ping1DSettings.vue';
 import Ping360Loader from '../components/widgets/sonar360/Ping360Loader.vue';
 import Ping360Settings from '../components/widgets/sonar360/Ping360Settings.vue';
 import { useMenuCoordination } from '../composables/useMenuCoordination';
+import NotificationMenu from '../components/utils/NotificationMenu.vue';
+import { useNotificationStore } from '../stores/notificationStore';
+import { wsManager } from '../composables/useRecordingSessions';
 
 const { name: breakpoint } = useDisplay();
 const theme = useTheme();
@@ -220,7 +246,7 @@ const showRecordingsMenu = ref(false);
 const isSpeedDialOpen = ref(false);
 const isGlassMode = ref(true);
 const isMenuOpen = ref(false);
-const showNotification = ref(false);
+const showNotifications = ref(false);
 const recordings = ref([]);
 const replayData = ref(null);
 const isReplayActive = ref(false);
@@ -232,6 +258,7 @@ const menus = {
   middle: isMenuOpen,
   recordings: showRecordingsMenu,
   settings: showSettings,
+  notifications: showNotifications,
 };
 
 useMenuCoordination(menus);
@@ -240,6 +267,7 @@ const yawAngle = ref(0);
 const yawConnectionStatus = ref('Disconnected');
 let yawWebSocket = null;
 let reconnectTimeout = null;
+
 
 const commonSettings = reactive({});
 
@@ -631,8 +659,45 @@ const handleFullscreenChange = () => {
 
 const onServerConnected = (url) => {
   serverUrl.value = url;
-  localStorage.setItem('serverUrl', url);
-  connectWebSocket();
+  wsManager.connect(url);
+  wsManager.addListener((data) => {
+    if (data.device_id) {
+      const sessionData = data.RecordingStatus || data;
+      const existingSession = recordingSessions.value.get(sessionData.device_id);
+      const statusChanged = !existingSession || existingSession.is_active !== sessionData.is_active;
+
+      // Update recording session state
+      recordingSessions.value.set(sessionData.device_id, sessionData);
+
+      // Show notification only if status changed
+      if (statusChanged) {
+        if (sessionData.is_active) {
+          notificationStore.addNotification({
+            title: 'Recording Started',
+            message: `Recording started for device ${sessionData.device_id}`,
+            icon: 'mdi-record',
+            color: 'success',
+            device_type: sessionData.device_type,
+            device_id: sessionData.device_id
+          });
+        } else {
+          notificationStore.addNotification({
+            title: 'Recording Stopped',
+            message: `Recording stopped for device ${sessionData.device_id}`,
+            icon: 'mdi-stop',
+            color: 'error',
+            device_type: sessionData.device_type,
+            device_id: sessionData.device_id
+          });
+        }
+      }
+    } else if (data.AllRecordingStatus) {
+      // Handle initial status fetch
+      data.AllRecordingStatus.forEach(session => {
+        recordingSessions.value.set(session.device_id, session);
+      });
+    }
+  });
 };
 
 const handleServerUrlUpdate = async (newUrl) => {
@@ -787,9 +852,37 @@ watchOnce(serverUrl, (newUrl) => {
   }
 });
 
+const notificationStore = useNotificationStore();
+const notifications = computed(() => notificationStore.notifications);
+const unreadCount = computed(() => notifications.value.filter(n => !n.read).length);
+
+// Add recordingSessions ref
+const recordingSessions = ref(new Map());
+
+// Fetch initial recording statuses
+const fetchInitialRecordingStatuses = async () => {
+  if (!serverUrl.value) return;
+  
+  try {
+    const response = await fetch(`${serverUrl.value}/v1/device_manager/GetAllRecordingStatus`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording statuses');
+    }
+    const data = await response.json();
+    if (data.AllRecordingStatus) {
+      data.AllRecordingStatus.forEach(session => {
+        recordingSessions.value.set(session.device_id, session);
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching initial recording statuses:', err);
+  }
+};
+
 onMounted(() => {
   loadSettings();
   initializeYawConnection();
+  fetchInitialRecordingStatuses();
 
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme) {
@@ -828,6 +921,7 @@ onUnmounted(() => {
   if (websocket.value) {
     websocket.value.close();
   }
+  wsManager.disconnect();
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   cleanupYawConnection();
 });
@@ -854,6 +948,8 @@ provide('yawAngle', yawAngle);
 provide('yawConnectionStatus', yawConnectionStatus);
 provide('connectYawWebSocket', connectYawWebSocket);
 provide('cleanupYawConnection', cleanupYawConnection);
+provide('wsManager', wsManager);
+provide('recordingSessions', recordingSessions);
 </script>
 
 <style>
@@ -1194,6 +1290,56 @@ provide('cleanupYawConnection', cleanupYawConnection);
 
 @media (max-width: 600px) {
   .recordings-menu-wrapper {
+    width: calc(100vw - var(--button-size) - var(--button-gap) * 2);
+  }
+}
+
+.notification-menu {
+  z-index: 1000;
+}
+
+.notification-card {
+  overflow: hidden;
+}
+
+.notification-list {
+  overflow-y: auto;
+}
+
+.notification-list .v-list-item {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.notification-list .v-list-item:last-child {
+  border-bottom: none;
+}
+
+.notification-list .v-list-item.unread {
+  background-color: rgba(var(--v-theme-primary), 0.05);
+}
+
+.notification-list .v-list-item.unread::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: rgb(var(--v-theme-primary));
+}
+
+.notification-menu-wrapper {
+  position: fixed;
+  bottom: calc(var(--button-size) + var(--button-gap));
+  right: calc(var(--button-size) + var(--button-gap));
+  z-index: 999;
+  border-radius: var(--border-radius);
+  max-height: calc(100vh - 2 * (var(--button-size) + var(--button-gap)));
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .notification-menu-wrapper {
     width: calc(100vw - var(--button-size) - var(--button-gap) * 2);
   }
 }
