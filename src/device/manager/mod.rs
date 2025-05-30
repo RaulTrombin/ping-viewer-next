@@ -228,9 +228,9 @@ pub enum Request {
     DisableContinuousMode(UuidWrapper),
     #[serde(skip)]
     SpecialTurnOffContinuousMode(UuidWrapper),
-    StartRecording(Uuid),
-    StopRecording(Uuid),
-    GetRecordingStatus(Uuid),
+    StartRecording(UuidWrapper),
+    StopRecording(UuidWrapper),
+    GetRecordingStatus(UuidWrapper),
     GetAllRecordingStatus,
     #[serde(skip)]
     GetRecordingManager,
@@ -345,7 +345,7 @@ impl DeviceManager {
             }
             Request::StartRecording(device_id) => {
                 let result = self
-                    .start_recording(device_id)
+                    .start_recording(*device_id)
                     .await
                     .map(Answer::RecordingSession);
                 if let Err(e) = actor_request.respond_to.send(result) {
@@ -354,7 +354,7 @@ impl DeviceManager {
             }
             Request::StopRecording(device_id) => {
                 let result = self
-                    .stop_recording(device_id)
+                    .stop_recording(*device_id)
                     .await
                     .map(Answer::RecordingSession);
                 if let Err(e) = actor_request.respond_to.send(result) {
@@ -363,7 +363,7 @@ impl DeviceManager {
             }
             Request::GetRecordingStatus(device_id) => {
                 let result = self
-                    .get_recording_status(device_id)
+                    .get_recording_status(*device_id)
                     .await
                     .map(Answer::RecordingStatus);
                 if let Err(e) = actor_request.respond_to.send(result) {

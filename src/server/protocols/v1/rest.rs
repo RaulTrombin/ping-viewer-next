@@ -176,13 +176,13 @@ async fn device_manager_post(
             crate::device::manager::Request::DisableContinuousMode(UuidWrapper { uuid })
         }
         DeviceManagerPostOptionsV1::StartRecording => {
-            crate::device::manager::Request::StartRecording(uuid)
+            crate::device::manager::Request::StartRecording(UuidWrapper { uuid })
         }
         DeviceManagerPostOptionsV1::StopRecording => {
-            crate::device::manager::Request::StopRecording(uuid)
+            crate::device::manager::Request::StopRecording(UuidWrapper { uuid })
         }
         DeviceManagerPostOptionsV1::GetRecordingStatus => {
-            crate::device::manager::Request::GetRecordingStatus(uuid)
+            crate::device::manager::Request::GetRecordingStatus(UuidWrapper { uuid })
         }
     };
 
