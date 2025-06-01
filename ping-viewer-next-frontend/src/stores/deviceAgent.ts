@@ -23,12 +23,22 @@ import {
   gradiansToDegrees,
 } from '../ping-device/utils/ping360-utils';
 
+interface RecordingStatus {
+  device_id: string;
+  is_active: boolean;
+  file_path?: string;
+  start_time?: string;
+  device_type?: string;
+}
+
 export const usePingDeviceStore = defineStore('pingDevice', () => {
   const config = {
-    serverUrl: ref('blueos.local:6060'),
+    serverUrl: ref(`${window.location.hostname}:6060`),
   };
 
   const agents = new Map<string, DeviceAgent>();
+  const recordingState = ref(new Map<string, boolean>());
+  const wsManager = ref<any>(null);
 
   const apiService = new ApiService(config.serverUrl.value);
 
@@ -37,10 +47,49 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
     apiService.setServerUrl(url);
   }
 
+  function setWsManager(manager: any) {
+    wsManager.value = manager;
+    // Add listener for recording status updates
+    if (manager) {
+      manager.addListener((data: any) => {
+        if (data.device_id) {
+          const sessionData = data.RecordingStatus || data;
+          recordingState.value.set(sessionData.device_id, sessionData.is_active);
+        }
+      });
+    }
+  }
+
+  async function fetchInitialRecordingStatus(uuid: string) {
+    try {
+      const response = await apiService.sendHttpRequest(
+        'GetRecordingStatus',
+        'device_manager',
+        { uuid }
+      );
+      const status = response as { RecordingStatus?: RecordingStatus };
+      if (status?.RecordingStatus) {
+        recordingState.value.set(uuid, status.RecordingStatus.is_active);
+      } else {
+        // If no recording status found, explicitly set to false
+        recordingState.value.set(uuid, false);
+      }
+    } catch (error) {
+      console.error('Error fetching initial recording status:', error);
+      // On error, set to false to ensure consistent state
+      recordingState.value.set(uuid, false);
+    }
+  }
+
   function getAgent(uuid: string): DeviceAgent {
     if (!agents.has(uuid)) {
       const agent = new DeviceAgent(uuid, config.serverUrl.value);
       agents.set(uuid, agent);
+      // Initialize with false, will be updated by fetchInitialRecordingStatus
+      recordingState.value.set(uuid, false);
+      
+      // Fetch initial recording status when agent is created
+      fetchInitialRecordingStatus(uuid);
     }
 
     const agent = agents.get(uuid);
@@ -60,6 +109,8 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
 
     const connect = () => {
       agent.connect();
+      // Also fetch recording status when device is connected
+      fetchInitialRecordingStatus(uuid);
     };
 
     function disconnect() {
@@ -67,6 +118,7 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
       if (agent) {
         agent.disconnect();
         agents.delete(uuid);
+        recordingState.value.delete(uuid);
       }
     }
 
@@ -77,6 +129,84 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
     // Device type checks
     const isPing360 = computed(() => agent.deviceType.value === 'ping360');
     const isPing1D = computed(() => agent.deviceType.value === 'ping1d');
+
+    // Recording functionality
+    const isRecording = computed(() => recordingState.value.get(uuid) || false);
+
+    const getRecordingStatus = async () => {
+      try {
+        const response = await apiService.sendHttpRequest(
+          'GetRecordingStatus',
+          'device_manager',
+          { uuid }
+        );
+        const status = response as { RecordingStatus?: RecordingStatus };
+        if (status?.RecordingStatus) {
+          // Update local state with the latest status
+          recordingState.value.set(uuid, status.RecordingStatus.is_active);
+        }
+        return status?.RecordingStatus || null;
+      } catch (error) {
+        console.error('Error getting recording status:', error);
+        return null;
+      }
+    };
+
+    const startRecording = async () => {
+      try {
+        // First check if already recording
+        const currentStatus = await getRecordingStatus();
+        if (currentStatus?.is_active) {
+          console.warn('Device is already recording');
+          return false;
+        }
+
+        const response = await apiService.sendHttpRequest(
+          'StartRecording',
+          'device_manager',
+          { uuid }
+        );
+        if (response) {
+          recordingState.value.set(uuid, true);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Error starting recording:', error);
+        return false;
+      }
+    };
+
+    const stopRecording = async () => {
+      try {
+        // First check if actually recording
+        const currentStatus = await getRecordingStatus();
+        if (!currentStatus?.is_active) {
+          console.warn('Device is not recording');
+          return false;
+        }
+
+        const response = await apiService.sendHttpRequest(
+          'StopRecording',
+          'device_manager',
+          { uuid }
+        );
+        if (response) {
+          recordingState.value.set(uuid, false);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Error stopping recording:', error);
+        return false;
+      }
+    };
+
+    const toggleRecording = async () => {
+      // Always get fresh status before toggling
+      const currentStatus = await getRecordingStatus();
+      return currentStatus?.is_active ? stopRecording() : startRecording();
+    };
 
     // =================================================
     // PING360 SPECIFIC METHODS
@@ -258,6 +388,7 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
 
       isPing360,
       isPing1D,
+      isRecording,
 
       data: {
         messages: agent.messages,
@@ -283,6 +414,10 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
         disconnect,
         reconnect,
         sendConfigRequest,
+        toggleRecording,
+        startRecording,
+        stopRecording,
+        getRecordingStatus,
       },
 
       ping360: {
@@ -317,5 +452,6 @@ export const usePingDeviceStore = defineStore('pingDevice', () => {
   return {
     usePingDevice,
     setServerUrl,
+    setWsManager,
   };
 });

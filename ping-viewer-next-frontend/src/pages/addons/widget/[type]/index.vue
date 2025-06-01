@@ -163,6 +163,18 @@ export default defineComponent({
         const { action, value, id } = buttonEvent;
 
         switch (action) {
+          case 'toggle_recording':
+            const success = await deviceInstance.value.common.toggleRecording();
+            if (success) {
+              // Update button appearance based on recording state
+              const button = activeButtons.value.find(b => b.id === 'recording');
+              if (button) {
+                button.color = deviceInstance.value.isRecording.value ? '#4CAF50' : '#F44336';
+                button.icon = deviceInstance.value.isRecording.value ? 'mdi-stop' : 'mdi-record';
+              }
+            }
+            break;
+
           case 'increase_range':
             if (widgetType.value === 'ping360') {
               const rangeTarget = value || '+10%';

@@ -66,6 +66,7 @@ export interface PingDeviceAPI {
 
   isPing360: Ref<boolean>;
   isPing1D: Ref<boolean>;
+  isRecording: Ref<boolean>;
 
   data: {
     messages: Ref<DeviceResponse[]>;
@@ -91,6 +92,7 @@ export interface PingDeviceAPI {
     disconnect: () => void;
     reconnect: () => void;
     sendConfigRequest: (key: string, value: number | string | boolean) => boolean;
+    toggleRecording: () => Promise<boolean>;
   };
 
   ping360: {
