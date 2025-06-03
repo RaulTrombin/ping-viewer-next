@@ -8,7 +8,7 @@ use tokio::sync::{broadcast, RwLock};
 use tracing::{error, warn};
 use uuid::Uuid;
 use mcap::{Compression, WriteOptions};
-use foxglove::{LazyRawChannel, McapWriter};
+use foxglove::{ChannelBuilder, McapWriter, log, Context};
 use foxglove::McapWriterHandle;
 use std::io::BufWriter;
 use std::fs::File;
@@ -19,12 +19,7 @@ use crate::device::{
 };
 
 mod schemas;
-use schemas::{Ping1DMessage, Ping360Message, RecordingHeader, DeviceInfo};
-
-static PING1D_CHANNEL: LazyRawChannel = LazyRawChannel::new("/ping1d", "json");
-static PING360_CHANNEL: LazyRawChannel = LazyRawChannel::new("/ping360", "json");
-static COMMON_CHANNEL: LazyRawChannel = LazyRawChannel::new("/common", "json");
-static HEADER_CHANNEL: LazyRawChannel = LazyRawChannel::new("/header", "json");
+use schemas::{DeviceInfo, Ping1DMessage, Ping360Message, Potato, RecordingHeader};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingSession {
@@ -102,8 +97,9 @@ impl RecordingManager {
             .chunk_size(Some(1024 * 768))
             .compression(Some(Compression::Zstd));
 
-        let mcap_writer = McapWriter::with_options(options)
-            .create_new_buffered_file(&file_path)
+        // Create context and get writer
+        let ctx = Context::new();
+        let mcap_writer = ctx.mcap_writer().create_new_buffered_file(&file_path)
             .map_err(|e| ManagerError::Other(format!("Failed to create MCAP file: {}", e)))?;
 
         let session = RecordingSession {
@@ -134,7 +130,7 @@ impl RecordingManager {
 
         tokio::spawn(async move {
             if let Err(e) =
-                Self::recording_task(handler, file_path, sessions, writers, device_id, device_info).await
+                Self::recording_task(handler, file_path, sessions, writers, device_id, device_info, ctx).await
             {
                 error!("Recording task failed for device {}: {:?}", device_id, e);
             }
@@ -178,6 +174,7 @@ impl RecordingManager {
         writers: Arc<RwLock<HashMap<Uuid, McapWriterHandle<BufWriter<File>>>>>,
         device_id: Uuid,
         device_info: ManagerDeviceInfo,
+        ctx: Arc<Context>,
     ) -> Result<(), ManagerError> {
         let subscriber = handler
             .send(super::devices::PingRequest::GetSubscriber)
@@ -200,6 +197,16 @@ impl RecordingManager {
             sessions_guard.get(&device_id).unwrap().clone()
         };
 
+        // Define topic strings
+        let ping1d_topic = format!("/device_{}/ping1d", device_id);
+        let ping360_topic = format!("/device_{}/ping360", device_id);
+        let header_topic = format!("/device_{}/header", device_id);
+
+        // Create device-specific channels with proper schema
+        let ping1d_channel = ctx.channel_builder(&ping1d_topic) .add_metadata("foxglove.device_id", &device_id.to_string()).build::<Potato>();
+        let ping360_channel = ctx.channel_builder(&ping360_topic).add_metadata("foxglove.device_id", &device_id.to_string() ).build::<Potato>();
+        let header_channel = ctx.channel_builder(&header_topic).add_metadata("foxglove.device_id", &device_id.to_string() ).build::<Potato>();
+
         let header = RecordingHeader {
             version: "1.0".to_string(),
             device_info: DeviceInfo {
@@ -210,10 +217,12 @@ impl RecordingManager {
             file_format: "mcap".to_string(),
         };
 
-        // Write header message
-        let header_bytes = serde_json::to_vec(&header)
-            .map_err(|e| ManagerError::Other(format!("Failed to serialize header: {}", e)))?;
-        HEADER_CHANNEL.log(&header_bytes);
+        // Write header message using the specific writer and context
+        let header_message = Potato {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            message_type: "ping360_auto_device_data".to_string()
+        };
+        header_channel.log(&header_message);
 
         while {
             let sessions_guard = sessions.read().await;
@@ -234,9 +243,7 @@ impl RecordingManager {
                             data: serde_json::json!(answer),
                         };
 
-                        let message_bytes = serde_json::to_vec(&message)
-                            .map_err(|e| ManagerError::Other(format!("Failed to serialize message: {}", e)))?;
-                        PING360_CHANNEL.log(&message_bytes);
+                        ping360_channel.log(&header_message);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping360(
@@ -249,9 +256,7 @@ impl RecordingManager {
                             data: serde_json::json!(answer),
                         };
 
-                        let message_bytes = serde_json::to_vec(&message)
-                            .map_err(|e| ManagerError::Other(format!("Failed to serialize message: {}", e)))?;
-                        PING360_CHANNEL.log(&message_bytes);
+                        ping360_channel.log(&header_message);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping1D(
@@ -264,9 +269,7 @@ impl RecordingManager {
                             data: serde_json::json!(answer),
                         };
 
-                        let message_bytes = serde_json::to_vec(&message)
-                            .map_err(|e| ManagerError::Other(format!("Failed to serialize message: {}", e)))?;
-                        PING1D_CHANNEL.log(&message_bytes);
+                        ping1d_channel.log(&header_message);
                     }
                 }
                 Err(e) => {
