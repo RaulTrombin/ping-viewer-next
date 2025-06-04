@@ -1,17 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
+    collections::HashMap, path::{Path, PathBuf}, sync::Arc
 };
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, warn};
 use uuid::Uuid;
 use mcap::{Compression, WriteOptions};
-use foxglove::{ChannelBuilder, McapWriter, log, Context};
+use foxglove::{log, schemas::{PackedElementField, PointCloud, Pose, Quaternion, Timestamp, Vector3}, ChannelBuilder, Context, McapWriter};
 use foxglove::McapWriterHandle;
 use std::io::BufWriter;
 use std::fs::File;
+use std::f32::consts::PI;
 
 use crate::device::{
     devices::DeviceActorHandler,
@@ -200,12 +199,22 @@ impl RecordingManager {
         // Define topic strings
         let ping1d_topic = format!("/device_{}/ping1d", device_id);
         let ping360_topic = format!("/device_{}/ping360", device_id);
+        let pointcloud_topic = format!("/device_{}/pointcloud", device_id);
         let header_topic = format!("/device_{}/header", device_id);
 
         // Create device-specific channels with proper schema
-        let ping1d_channel = ctx.channel_builder(&ping1d_topic) .add_metadata("foxglove.device_id", &device_id.to_string()).build::<Potato>();
-        let ping360_channel = ctx.channel_builder(&ping360_topic).add_metadata("foxglove.device_id", &device_id.to_string() ).build::<Potato>();
-        let header_channel = ctx.channel_builder(&header_topic).add_metadata("foxglove.device_id", &device_id.to_string() ).build::<Potato>();
+        let ping1d_channel = ctx.channel_builder(&ping1d_topic)
+            .add_metadata("foxglove.device_id", &device_id.to_string())
+            .build::<Potato>();
+        let ping360_channel = ctx.channel_builder(&ping360_topic)
+            .add_metadata("foxglove.device_id", &device_id.to_string())
+            .build::<Potato>();
+        let pointcloud_channel = ctx.channel_builder(&pointcloud_topic)
+            .add_metadata("foxglove.device_id", &device_id.to_string())
+            .build::<PointCloud>();
+        let header_channel = ctx.channel_builder(&header_topic)
+            .add_metadata("foxglove.device_id", &device_id.to_string())
+            .build::<Potato>();
 
         let header = RecordingHeader {
             version: "1.0".to_string(),
@@ -244,6 +253,10 @@ impl RecordingManager {
                         };
 
                         ping360_channel.log(&header_message);
+
+                        // Convert to point cloud
+                        let pointcloud = Self::convert_to_point_cloud(&answer);
+                        pointcloud_channel.log(&pointcloud);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping360(
@@ -282,5 +295,96 @@ impl RecordingManager {
         sessions.write().await.remove(&device_id);
         writers.write().await.remove(&device_id);
         Ok(())
+    }
+
+    fn convert_to_point_cloud(data: &bluerobotics_ping::ping360::AutoDeviceDataStruct) -> PointCloud {
+        // Convert gradians to radians and adjust for Ping360's coordinate system
+        let angle_rad = (data.angle as f32 * PI / 200.0) - PI;
+
+        // Calculate distance per sample based on speed of sound and sample period
+        let sample_period = data.sample_period as f32 * 25e-9; // Convert to seconds
+        let speed_of_sound = 1500.0; // Speed of sound in water (m/s)
+        let distance_per_sample = (sample_period * speed_of_sound) / 2.0;
+
+        // Define point cloud fields (x, y, z, intensity)
+        let fields = vec![
+            PackedElementField {
+                name: "x".to_string(),
+                offset: 0,
+                r#type: 7, // FLOAT32
+            },
+            PackedElementField {
+                name: "y".to_string(),
+                offset: 4,
+                r#type: 7, // FLOAT32
+            },
+            PackedElementField {
+                name: "z".to_string(),
+                offset: 8,
+                r#type: 7, // FLOAT32
+            },
+            PackedElementField {
+                name: "intensity".to_string(),
+                offset: 12,
+                r#type: 1, // UINT8
+            },
+        ];
+
+        // Calculate total size of point data
+        let point_stride = 16; // 3 floats (4 bytes each) + 1 uint8
+
+        // Pre-calculate number of valid points
+        let valid_points = data.data.iter().filter(|&&intensity| intensity >= 5).count();
+        let mut point_data = Vec::with_capacity(valid_points * point_stride);
+
+        // Convert each sample to a point
+        for (i, &intensity) in data.data.iter().enumerate() {
+            // Skip points with very low intensity (likely noise)
+            if intensity < 5 {
+                continue;
+            }
+
+            let distance = (i as f32 + 0.5) * distance_per_sample;
+
+            // Convert polar coordinates to Cartesian
+            let x = distance * angle_rad.cos();
+            let y = distance * angle_rad.sin();
+            let z: f32 = 0.0; // Assuming the sonar is mounted horizontally
+
+            // Write point data - ensure we write complete points
+            let mut point_bytes = [0u8; 16];
+            point_bytes[0..4].copy_from_slice(&x.to_le_bytes());
+            point_bytes[4..8].copy_from_slice(&y.to_le_bytes());
+            point_bytes[8..12].copy_from_slice(&z.to_le_bytes());
+            point_bytes[12] = intensity;
+            point_data.extend_from_slice(&point_bytes);
+        }
+
+        // Verify data alignment
+        assert_eq!(point_data.len() % point_stride, 0, "Point cloud data length {} is not a multiple of point_stride {}", point_data.len(), point_stride);
+
+        PointCloud {
+            timestamp: Some(Timestamp {
+                sec: chrono::Utc::now().timestamp() as u32,
+                nsec: chrono::Utc::now().timestamp_subsec_nanos(),
+            }),
+            frame_id: format!("device"),
+            pose: Some(Pose {
+                position: Some(Vector3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                }),
+                orientation: Some(Quaternion {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                }),
+            }),
+            point_stride: point_stride as u32,
+            fields,
+            data: point_data.into(),
+        }
     }
 }
