@@ -1,3 +1,4 @@
+use bluerobotics_ping::ping360::{AutoDeviceDataStruct, DeviceDataStruct};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap, path::{Path, PathBuf}, sync::Arc
@@ -260,7 +261,7 @@ impl RecordingManager {
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping360(
-                        bluerobotics_ping::ping360::Messages::Transducer(answer),
+                        bluerobotics_ping::ping360::Messages::DeviceData(answer),
                     )) = bluerobotics_ping::Messages::try_from(&msg)
                     {
                         let message = Ping360Message {
@@ -270,6 +271,24 @@ impl RecordingManager {
                         };
 
                         ping360_channel.log(&header_message);
+
+                        let autotranstucer = AutoDeviceDataStruct{
+                            mode: answer.mode,
+                            gain_setting: answer.gain_setting,
+                            angle: answer.angle,
+                            transmit_duration: answer.transmit_duration,
+                            sample_period: answer.sample_period,
+                            transmit_frequency: answer.transmit_frequency,
+                            start_angle: 0,
+                            stop_angle: 399,
+                            num_steps: 1,
+                            delay: 0,
+                            number_of_samples: answer.number_of_samples,
+                            data_length: answer.number_of_samples,
+                            data: answer.data,
+                        };
+                        let pointcloud = Self::convert_to_point_cloud(&autotranstucer);
+                        pointcloud_channel.log(&pointcloud);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping1D(
