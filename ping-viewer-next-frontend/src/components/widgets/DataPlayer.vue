@@ -2,7 +2,7 @@
   <v-container class="pa-0">
     <v-row>
       <v-col class="mr-2">
-        <input type="file" @change="loadFile" accept=".json" />
+        <input type="file" @change="loadFile" accept=".mcap" />
       </v-col>
 
       <template v-if="loadedData.length > 0">
@@ -39,6 +39,9 @@
 </template>
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { loadDecompressHandlers } from "@mcap/support";
+import { BlobReadable } from "@mcap/browser";
+import { McapIndexedReader } from "@mcap/core";
 
 const loadedData = ref([]);
 const currentFrame = ref(0);
@@ -54,24 +57,48 @@ const displayedFrame = computed(() => {
   return Math.min(Math.max(1, currentFrame.value + 1), loadedData.value.length);
 });
 
-const loadFile = (event) => {
+const loadFile = async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
+  if (file.name.endsWith('.mcap')) {
     try {
-      loadedData.value = JSON.parse(e.target.result);
+      const decompressHandlers = await loadDecompressHandlers();
+      const reader = await McapIndexedReader.Initialize({
+        readable: new BlobReadable(file),
+        decompressHandlers,
+      });
+
+      const channels = Array.from(reader.channelsById.values());
+      const messages = [];
+      for await (const msg of reader.readMessages()) {
+        messages.push(msg);
+      }
+
+      loadedData.value = messages.map(msg => {
+        let data;
+        try {
+          data = JSON.parse(new TextDecoder().decode(msg.data));
+        } catch {
+          data = msg.data;
+        }
+        return {
+          timestamp: msg.logTime,
+          ...data,
+        };
+      });
+
       currentFrame.value = 0;
-      baseTimestamp = new Date(loadedData.value[0].timestamp).getTime();
+      baseTimestamp = loadedData.value.length > 0 ? loadedData.value[0].timestamp : 0;
       emit('loadedData', loadedData.value);
       updateCurrentFrame();
     } catch (error) {
-      console.error('Error parsing JSON file:', error);
-      alert("Error loading file. Please ensure it's a valid JSON file.");
+      console.error('Error reading MCAP file:', error);
+      alert("Error loading MCAP file. Please ensure it's a valid MCAP file.");
     }
-  };
-  reader.readAsText(file);
+  } else {
+    alert("Unsupported file type. Please select a .mcap file.");
+  }
 };
 
 const play = () => {

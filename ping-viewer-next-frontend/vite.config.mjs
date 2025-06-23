@@ -9,6 +9,8 @@ import VueRouter from 'unplugin-vue-router/vite';
 import { defineConfig } from 'vite';
 import Layouts from 'vite-plugin-vue-layouts';
 import Vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
+import wasm from "vite-plugin-wasm"
+import topLevelAwait from "vite-plugin-top-level-await";
 
 const removeMdiPreload = {
   name: 'remove-eot-preload',
@@ -23,6 +25,8 @@ const removeMdiPreload = {
 
 export default defineConfig({
   plugins: [
+    wasm(),
+    topLevelAwait(),
     VueRouter(),
     Layouts(),
     Vue({
@@ -79,5 +83,11 @@ export default defineConfig({
         assetFileNames: 'assets/[name][extname]',
       },
     },
+    target: 'esnext',
+    optimizeDeps: {
+      exclude: [
+        "@syntect/wasm"
+      ]
+    }
   },
 });
