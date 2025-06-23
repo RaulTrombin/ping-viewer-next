@@ -11,7 +11,7 @@ license = "MIT"
 actix = "0.13.5"
 actix-cors = "0.7.1"
 actix-web = "4.10.2"
-bluerobotics-ping = "0.3.4"
+bluerobotics-ping = { version="0.3.5", features = ["serde", "json_schema"] }
 actix-web-actors = "4.3.1"
 chrono = { version = "0.4.41", features = ["serde"] }
 clap = {version = "4.5.37", features = ["derive"] }

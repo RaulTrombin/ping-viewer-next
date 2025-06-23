@@ -1,4 +1,4 @@
-use bluerobotics_ping::ping360::{AutoDeviceDataStruct, DeviceDataStruct};
+use bluerobotics_ping::{ping1d::ProfileStruct, ping360::{AutoDeviceDataStruct, DeviceDataStruct}};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap, path::{Path, PathBuf}, sync::Arc
@@ -19,7 +19,7 @@ use crate::device::{
 };
 
 mod schemas;
-use schemas::{DeviceInfo, Ping1DMessage, Ping360Message, Potato, RecordingHeader};
+use schemas::{DeviceInfo, RecordingHeader};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingSession {
@@ -205,34 +205,11 @@ impl RecordingManager {
 
         // Create device-specific channels with proper schema
         let ping1d_channel = ctx.channel_builder(&ping1d_topic)
-            .add_metadata("foxglove.device_id", &device_id.to_string())
-            .build::<Potato>();
+            .build::<ProfileStruct>();
         let ping360_channel = ctx.channel_builder(&ping360_topic)
-            .add_metadata("foxglove.device_id", &device_id.to_string())
-            .build::<Potato>();
-        let pointcloud_channel = ctx.channel_builder(&pointcloud_topic)
-            .add_metadata("foxglove.device_id", &device_id.to_string())
-            .build::<PointCloud>();
-        let header_channel = ctx.channel_builder(&header_topic)
-            .add_metadata("foxglove.device_id", &device_id.to_string())
-            .build::<Potato>();
-
-        let header = RecordingHeader {
-            version: "1.0".to_string(),
-            device_info: DeviceInfo {
-                device_id: device_id.to_string(),
-                start_time: session.start_time.to_rfc3339(),
-                device_properties: serde_json::json!(device_info),
-            },
-            file_format: "mcap".to_string(),
-        };
-
-        // Write header message using the specific writer and context
-        let header_message = Potato {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            message_type: "ping360_auto_device_data".to_string()
-        };
-        header_channel.log(&header_message);
+            .build::<AutoDeviceDataStruct>();
+        // let pointcloud_channel = ctx.channel_builder(&pointcloud_topic)
+        //     .build::<PointCloud>();
 
         while {
             let sessions_guard = sessions.read().await;
@@ -247,32 +224,16 @@ impl RecordingManager {
                         bluerobotics_ping::ping360::Messages::AutoDeviceData(answer),
                     )) = bluerobotics_ping::Messages::try_from(&msg)
                     {
-                        let message = Ping360Message {
-                            timestamp: chrono::Utc::now().to_rfc3339(),
-                            message_type: "ping360_auto_device_data".to_string(),
-                            data: serde_json::json!(answer),
-                        };
-
-                        ping360_channel.log(&header_message);
-
-                        // Convert to point cloud
-                        let pointcloud = Self::convert_to_point_cloud(&answer);
-                        pointcloud_channel.log(&pointcloud);
+                        ping360_channel.log(&answer);
+                        // let pointcloud = Self::convert_to_point_cloud(&answer);
+                        // pointcloud_channel.log(&pointcloud);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping360(
                         bluerobotics_ping::ping360::Messages::DeviceData(answer),
                     )) = bluerobotics_ping::Messages::try_from(&msg)
                     {
-                        let message = Ping360Message {
-                            timestamp: chrono::Utc::now().to_rfc3339(),
-                            message_type: "ping360_transducer".to_string(),
-                            data: serde_json::json!(answer),
-                        };
-
-                        ping360_channel.log(&header_message);
-
-                        let autotranstucer = AutoDeviceDataStruct{
+                        let autotransducer = AutoDeviceDataStruct{
                             mode: answer.mode,
                             gain_setting: answer.gain_setting,
                             angle: answer.angle,
@@ -287,21 +248,16 @@ impl RecordingManager {
                             data_length: answer.number_of_samples,
                             data: answer.data,
                         };
-                        let pointcloud = Self::convert_to_point_cloud(&autotranstucer);
-                        pointcloud_channel.log(&pointcloud);
+                         ping360_channel.log(&autotransducer);
+                        // let pointcloud = Self::convert_to_point_cloud(&autotransducer);
+                        // pointcloud_channel.log(&pointcloud);
                     }
 
                     if let Ok(bluerobotics_ping::Messages::Ping1D(
                         bluerobotics_ping::ping1d::Messages::Profile(answer),
                     )) = bluerobotics_ping::Messages::try_from(&msg)
                     {
-                        let message = Ping1DMessage {
-                            timestamp: chrono::Utc::now().to_rfc3339(),
-                            message_type: "ping1d_profile".to_string(),
-                            data: serde_json::json!(answer),
-                        };
-
-                        ping1d_channel.log(&header_message);
+                        ping1d_channel.log(&answer);
                     }
                 }
                 Err(e) => {
