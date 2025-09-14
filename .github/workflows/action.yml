@@ -52,6 +52,9 @@ jobs:
     defaults:
       run:
         working-directory: ping-viewer-next-frontend
+    outputs:
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_branch: ${{ github.head_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,6 +81,14 @@ jobs:
         with:
           name: dist
           path: ping-viewer-next-frontend/dist
+
+  call-deploy-preview:
+    needs: build-frontend
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/deploy-preview.yml
+    with:
+      pr_number: ${{ needs.build-frontend.outputs.pr_number }}
+      pr_branch: ${{ needs.build-frontend.outputs.pr_branch }}
 
   build:
           needs: [quick-tests, build-frontend]
