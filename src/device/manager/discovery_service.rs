@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::net::SocketAddrV4;
 use std::time::Duration;
 
+use crate::device::devices::DeviceError::PingError;
+use bluerobotics_ping::device::PingDevice;
 use bluerobotics_ping::ping1d::Device as Ping1D;
 use bluerobotics_ping::ping360::Device as Ping360;
 use tokio::sync::broadcast;
@@ -15,7 +17,8 @@ use crate::device::devices::{DeviceActor, DeviceType, PingAnswer, UpgradeResult}
 use crate::device::manager::ManagerError;
 
 use super::{
-    device_discovery, DeviceInfo, DeviceSelection, DeviceStatus, SourceSelection, SourceType,
+    device_discovery, CommonProperties, DeviceInfo, DeviceProperties, DeviceSelection,
+    DeviceStatus, Ping1DProperties, Ping360Config, Ping360Properties, SourceSelection, SourceType,
 };
 
 use std::collections::hash_map::DefaultHasher;
@@ -131,12 +134,93 @@ impl DeviceFactory {
         source.hash(&mut hasher);
         let id = Uuid::from_u128(hasher.finish() as u128);
 
+        let properties: Option<DeviceProperties> = match device_type {
+            DeviceSelection::Common => match &device.device_type {
+                DeviceType::Common(dev) => {
+                    let device_information = dev
+                        .device_information()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+                    let protocol_version = dev
+                        .protocol_version()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+                    let common = CommonProperties {
+                        device_information,
+                        protocol_version,
+                    };
+                    Some(DeviceProperties::Common(common))
+                }
+                _ => None,
+            },
+            DeviceSelection::Ping1D => match &device.device_type {
+                DeviceType::Ping1D(dev) => {
+                    let device_information = dev
+                        .device_information()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+                    let protocol_version = dev
+                        .protocol_version()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+                    let common = CommonProperties {
+                        device_information,
+                        protocol_version,
+                    };
+                    Some(DeviceProperties::Ping1D(Ping1DProperties { common }))
+                }
+                _ => None,
+            },
+            DeviceSelection::Ping360 => match &device.device_type {
+                DeviceType::Ping360(dev) => {
+                    let device_information = dev
+                        .device_information()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+                    let protocol_version = dev
+                        .protocol_version()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+
+                    let device_data = dev
+                        .device_data()
+                        .await
+                        .map_err(|e| ManagerError::DeviceError(PingError(e)))?;
+
+                    let auto_transmit = Ping360Config {
+                        mode: device_data.mode,
+                        gain_setting: device_data.gain_setting,
+                        transmit_duration: device_data.transmit_duration,
+                        sample_period: device_data.sample_period,
+                        transmit_frequency: device_data.transmit_frequency,
+                        number_of_samples: 1200,
+                        start_angle: 0,
+                        stop_angle: 399,
+                        num_steps: 1,
+                        delay: 0,
+                    };
+
+                    Some(DeviceProperties::Ping360(Ping360Properties {
+                        common: CommonProperties {
+                            device_information,
+                            protocol_version,
+                        },
+                        continuous_mode_settings: std::sync::Arc::new(std::sync::RwLock::new(
+                            auto_transmit,
+                        )),
+                    }))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+
         let device = DeviceInfo {
             id,
             source,
             status: DeviceStatus::Available,
             device_type,
-            properties: None,
+            properties,
         };
 
         Ok(device)
@@ -165,6 +249,9 @@ impl DeviceDiscoveryManager {
     }
 
     pub fn start_discovery(&mut self) {
+        if self.handle.is_some() {
+            return;
+        }
         let tx = self.tx.clone();
         let mut known_devices_rx = self.known_devices_rx.resubscribe();
 
