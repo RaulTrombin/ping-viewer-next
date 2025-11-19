@@ -493,9 +493,6 @@ impl DeviceManager {
                 // Ping360 bootloader handles putting device into bootloader mode automatically
                 // Just ensure device is released and mark as in progress
                 if let Some(device_id) = device_id_opt {
-
-
-
                     let _ = self.disable_device(device_id).await;
                     if let Ok(device) = self.get_mut_device(device_id) {
                         device.status = DeviceStatus::FirmwareUpdateInProgress;
@@ -528,7 +525,6 @@ impl DeviceManager {
                             status: new_status,
                         }))
                         .await;
-
                 }
             });
         });
