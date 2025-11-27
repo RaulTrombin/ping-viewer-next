@@ -15,7 +15,6 @@ RUN chmod +x /entrypoint.sh && \
     fi && \
     chmod +x  /app/ping-viewer-next && \
     rm /ping-viewer-next.*
-COPY ./firmwares/ /app/firmwares/
 RUN set -eux; \
     mkdir -p /app/firmwares/utils; \
 		if [ "$(uname -m)" = "aarch64" ]; then \
