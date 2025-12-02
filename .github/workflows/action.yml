@@ -121,7 +121,7 @@ jobs:
             uses: houseabsolute/actions-rust-cross@v0.0.14
             with:
               target: ${{ matrix.TARGET }}
-              args: "--release --locked --features 'embed-frontend blueos-extension'"
+              args: "--release --locked --features 'embed-frontend'"
 
           - name: Rename
             run: cp target/${{ matrix.TARGET }}/release/${{ github.event.repository.name }}${{ matrix.EXTENSION }} ${{ github.event.repository.name }}-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
