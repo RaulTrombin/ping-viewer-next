@@ -1,30 +1,26 @@
-fn resolve_stm32flash_path() -> Result<String, FirmwareUpdateError> {
-    if let Ok(path) = which::which("stm32flash") {
+fn resolve_tool_path(tool: FlashingTool) -> Result<String, FirmwareUpdateError> {
+    let name = tool.binary_name();
+    if let Ok(path) = which::which(name) {
+        info!("found {name} as a system binary");
         return Ok(path.to_string_lossy().to_string());
     }
     let fallback = std::env::current_dir()
-        .map(|p| p.join("firmwares").join("utils").join("stm32flash"))
-        .map_err(|e| FirmwareUpdateError::Process(format!("cwd error: {e}")))?;
+        .map(|p| p.join("firmwares").join("utils").join(name))
+        .map_err(|e| {
+            error!("cwd error while resolving {name} path: {e}");
+            FirmwareUpdateError::Process(format!("cwd error: {e}"))
+        })?;
     if fallback.exists() {
+        info!("found {name} binary on predefined folder");
         return Ok(fallback.to_string_lossy().to_string());
     }
-    Err(FirmwareUpdateError::MissingTool)
-}
-
-fn resolve_ping360_bootloader_path() -> Result<String, FirmwareUpdateError> {
-    if let Ok(path) = which::which("ping360-bootloader") {
-        return Ok(path.to_string_lossy().to_string());
-    }
-    let fallback = std::env::current_dir()
-        .map(|p| p.join("firmwares").join("utils").join("ping360-bootloader"))
-        .map_err(|e| FirmwareUpdateError::Process(format!("cwd error: {e}")))?;
-    if fallback.exists() {
-        return Ok(fallback.to_string_lossy().to_string());
-    }
-    Err(FirmwareUpdateError::MissingTool)
+    let err = FirmwareUpdateError::MissingTool(tool);
+    error!("{name} binary not found");
+    Err(err)
 }
 use paperclip::actix::Apiv2Schema;
 use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 
 use crate::device::manager::SourceSelection;
 use std::path::{Path, PathBuf};
@@ -63,12 +59,27 @@ pub enum FirmwareUpdateResult {
     Running,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum FlashingTool {
+    Ping1,
+    Ping360,
+}
+
+impl FlashingTool {
+    fn binary_name(&self) -> &'static str {
+        match self {
+            FlashingTool::Ping1 => "stm32flash",
+            FlashingTool::Ping360 => "ping360-bootloader",
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum FirmwareUpdateError {
     // #[error("stm32flash not found in PATH")]
-    MissingTool,
-    // #[error("invalid firmware path: {0}")]
-    InvalidFirmwarePath(String),
+    MissingTool(FlashingTool),
+    // #[error("missing firmware: {0}")]
+    MissingFirmware(String),
     // #[error("unsupported device for this operation")]
     UnsupportedDevice,
     // #[error("io error: {0}")]
@@ -125,11 +136,11 @@ pub async fn try_flash_ping360_with_options(
     on_completion: Option<Box<dyn FnOnce(bool) + Send + 'static>>,
 ) -> Result<(FirmwareUpdateResult, tokio::task::JoinHandle<()>), FirmwareUpdateError> {
     // Resolve ping360-bootloader path (PATH first, then ./utils/ping360-bootloader)
-    let ping360_bootloader = resolve_ping360_bootloader_path()?;
+    let ping360_bootloader = resolve_tool_path(FlashingTool::Ping360)?;
 
     if let Some(path) = firmware_path {
         if !std::path::Path::new(path).exists() {
-            return Err(FirmwareUpdateError::InvalidFirmwarePath(path.to_string()));
+            return Err(FirmwareUpdateError::MissingFirmware(path.to_string()));
         }
     }
 
@@ -250,11 +261,11 @@ pub async fn update_ping1d_with_callback(
     on_completion: Option<Box<dyn FnOnce(bool) + Send + 'static>>,
 ) -> Result<(FirmwareUpdateResult, tokio::task::JoinHandle<()>), FirmwareUpdateError> {
     // Resolve stm32flash binary (PATH first, then ./utils/stm32flash)
-    let stm32flash_path = resolve_stm32flash_path()?;
+    let stm32flash_path = resolve_tool_path(FlashingTool::Ping1)?;
 
     if let Some(path) = firmware_path {
         if !std::path::Path::new(path).exists() {
-            return Err(FirmwareUpdateError::InvalidFirmwarePath(path.to_string()));
+            return Err(FirmwareUpdateError::MissingFirmware(path.to_string()));
         }
     }
 
