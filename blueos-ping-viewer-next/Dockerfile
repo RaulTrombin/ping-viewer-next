@@ -55,6 +55,9 @@ RUN set -eux; \
 		fi; \
 	chmod a+x /app/firmwares/utils/ping360-bootloader /app/firmwares/utils/stm32flash || true; \
 	rm -rf /tmp/ping360-bootloader.zip /tmp/stm32flash.zip /tmp/ping360-bootloader-extract /tmp/stm32flash-extract || true
+
+RUN cp -r /app/firmwares /app/firmwares_default
+
 LABEL version="1.0.0-beta.6"
 
 RUN addgroup -g 1000 pingviewer && adduser -G pingviewer -u 1000 pingviewer -D
