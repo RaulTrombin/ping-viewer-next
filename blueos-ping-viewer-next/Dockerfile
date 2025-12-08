@@ -70,6 +70,7 @@ LABEL permissions='{\
     "Binds": [\
        "/usr/blueos/extensions/ping-viewer-next/logs:/app/logs",\
        "/usr/blueos/extensions/ping-viewer-next/recordings:/app/recordings"\
+	   "/usr/blueos/extensions/ping-viewer-next/firmwares:/app/firmwares"\
     ]\
   }\
 }'
