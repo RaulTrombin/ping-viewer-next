@@ -296,6 +296,81 @@ jobs:
               run: |
                 cd ping-viewer-next-desktop
                 bun install
+            - name: Ensure Tauri resources includes firmware path
+              shell: bash
+              run: |
+                set -euo pipefail
+                node - <<'NODE'
+                const fs = require('fs');
+                const path = 'ping-viewer-next-desktop/src-tauri/tauri.conf.json';
+                const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+                if (!data.bundle) data.bundle = {};
+                const cur = new Set(Array.isArray(data.bundle.resources) ? data.bundle.resources : []);
+                cur.add('resources/firmwares/**');
+                data.bundle.resources = Array.from(cur);
+                fs.writeFileSync(path, JSON.stringify(data, null, 2));
+                NODE
+            - name: Prepare firmware binaries for bundling
+              shell: bash
+              run: |
+                set -euo pipefail
+                cd ping-viewer-next-desktop/src-tauri
+                mkdir -p resources/firmwares/utils
+
+                # Versions of the helper tools to fetch
+                PING_BOOT_VERSION="0.0.0"
+                STM32FLASH_VERSION="0.0.0-br"
+
+                # Map runner to release target triple (aligns with Docker logic)
+                ARCH_TRIPLE=""
+                EXE_EXT=""
+                case "${{ matrix.platform }}" in
+                  ubuntu-22.04)
+                    ARCH_TRIPLE="x86_64-unknown-linux-musl"
+                    ;;
+                  macos-latest)
+                    if [[ "${{ matrix.args }}" == *"aarch64-apple-darwin"* ]]; then
+                      ARCH_TRIPLE="aarch64-apple-darwin"
+                    else
+                      ARCH_TRIPLE="x86_64-apple-darwin"
+                    fi
+                    ;;
+                  windows-latest)
+                    ARCH_TRIPLE="x86_64-pc-windows-msvc"
+                    EXE_EXT=".exe"
+                    ;;
+                esac
+
+                echo "Using ARCH_TRIPLE=${ARCH_TRIPLE} for platform ${{ matrix.platform }} (args='${{ matrix.args }}')"
+
+                PING_BOOT_URL="https://github.com/bluerobotics/ping360-bootloader/releases/download/${PING_BOOT_VERSION}/ping360-bootloader-${ARCH_TRIPLE}.zip"
+                STM32_URL="https://github.com/bluerobotics/stm32flash-code/releases/download/${STM32FLASH_VERSION}/stm32flash-${ARCH_TRIPLE}.zip"
+
+                # Download and extract ping360-bootloader
+                TMPDIR1="$(mktemp -d)"
+                ( cd "${TMPDIR1}" && curl -fsSL -o ping360-bootloader.zip "${PING_BOOT_URL}" && unzip -q ping360-bootloader.zip || true )
+                if BIN1="$(find "${TMPDIR1}" -maxdepth 1 -type f -name 'ping360-bootloader*' | head -n1)"; then
+                  cp "${BIN1}" "resources/firmwares/utils/ping360-bootloader${EXE_EXT}"
+                else
+                  echo "ping360-bootloader not found in archive; continuing without it."
+                fi
+                rm -rf "${TMPDIR1}"
+
+                # Download and extract stm32flash
+                TMPDIR2="$(mktemp -d)"
+                ( cd "${TMPDIR2}" && curl -fsSL -o stm32flash.zip "${STM32_URL}" && unzip -q stm32flash.zip || true )
+                if BIN2="$(find "${TMPDIR2}" -maxdepth 1 -type f -name 'stm32flash*' | head -n1)"; then
+                  cp "${BIN2}" "resources/firmwares/utils/stm32flash${EXE_EXT}"
+                else
+                  echo "stm32flash not found in archive; continuing without it."
+                fi
+                rm -rf "${TMPDIR2}"
+
+                # Ensure executables on Unix runners
+                if [[ "${{ matrix.platform }}" != "windows-latest" ]]; then
+                  chmod +x resources/firmwares/utils/ping360-bootloader || true
+                  chmod +x resources/firmwares/utils/stm32flash || true
+                fi
 
             - name: Build the app
               id: tauri-build
