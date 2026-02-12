@@ -1,23 +1,25 @@
 <template>
-  <v-card>
-    <v-card-title class="text-h5 pb-2">Ping1D Settings</v-card-title>
-    <v-card-text>
+  <v-card class="pa-0" style="width: 300px; max-width: 90vw">
+    <div class="windowHeader flex w-full justify-between items-center pl-4 pt-0">
+      <v-card-title class="ml-[50px] text-md text-center">Ping1D Settings</v-card-title>
+    </div>
+    <v-card-text class="px-6 pt-4 pb-6">
       <div v-if="isLoading" class="d-flex justify-center my-4">
         <v-progress-circular indeterminate />
       </div>
-      <div v-else class="mb-4">
-        <div class="d-flex align-center justify-space-between mb-4">
+      <div v-else>
+        <div class="d-flex align-center justify-space-between">
           <v-tooltip text="Enable automatic parameter adjustment" location="left">
             <template v-slot:activator="{ props }">
-              <span v-bind="props" class="text-body-2 text-medium-emphasis">
+              <span v-bind="props" class="text-[20px] text-medium-emphasis">
                 Auto Mode
               </span>
             </template>
           </v-tooltip>
-          <v-switch class="gap-2" v-model="isAutoMode" hide-details density="compact"
+          <v-switch class="gap-2" color="white" v-model="isAutoMode" hide-details density="compact"
             @update:model-value="handleAutoModeChange"></v-switch>
         </div>
-
+        <v-divider class="w-4/5 mt-2 mb-4" />
         <div class="d-flex align-center justify-space-between mb-1">
           <v-tooltip text="Scanning range in meters" location="left">
             <template v-slot:activator="{ props }">
@@ -30,12 +32,12 @@
         </div>
         <div class="d-flex align-center gap-2 mb-4">
           <v-text-field v-model.number="settings.scan_start" type="number" label="Start" :disabled="isAutoMode"
-            density="compact" hide-details style="width: 80px" @update:model-value="debouncedSaveSettings" />
+            density="compact" hide-details style="width: 90px" @update:model-value="debouncedSaveSettings" />
           <v-text-field v-model.number="settings.scan_length" type="number" label="Length" :disabled="isAutoMode"
-            density="compact" hide-details style="width: 80px" @update:model-value="debouncedSaveSettings" />
+            density="compact" hide-details style="width: 90px" @update:model-value="debouncedSaveSettings" />
         </div>
 
-        <div class="d-flex align-center justify-space-between mb-1">
+        <div class="d-flex align-center justify-space-between ">
           <v-tooltip text="Signal amplification level" location="left">
             <template v-slot:activator="{ props }">
               <span v-bind="props" class="text-body-2 text-medium-emphasis">
@@ -44,8 +46,28 @@
             </template>
           </v-tooltip>
         </div>
-        <v-select v-model="settings.gain_setting" :items="gainOptions" label="Gain" :disabled="isAutoMode"
-          density="compact" hide-details class="mb-4" @update:model-value="debouncedSaveSettings"></v-select>
+        <v-select v-model="settings.gain_setting" :items="gainOptions" :disabled="isAutoMode"
+          density="compact" hide-details class="mb-1" @update:model-value="debouncedSaveSettings"></v-select>
+        <v-divider class="w-4/5 mt-6 mb-4" />
+        <div class="d-flex align-center justify-space-between">
+          <v-tooltip text="Number of pings per second (Hz)" location="left">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="text-body-2 text-medium-emphasis">
+                Ping/s
+              </span>
+            </template>
+          </v-tooltip>
+        </div>
+        <div class="d-flex align-center gap-2 mb-4">
+          <v-slider color="white" v-model="pingsPerSecond" :min="0" :max="30" :step="1" density="compact" hide-details
+            class="flex-grow-1" @update:model-value="debouncedSaveSettings"></v-slider>
+          <v-text-field v-if="pingsPerSecond != 0" v-model.number="pingsPerSecond" type="number" :min="0" :max="30" :step="1"
+            density="compact" hide-details style="width: 10px" @update:model-value="debouncedSaveSettings"
+          ></v-text-field>
+          <v-btn v-if="pingsPerSecond === 0" variant="tonal" @click="manualPing">
+            Ping
+          </v-btn>
+        </div>
 
         <div class="d-flex align-center justify-space-between mb-1">
           <v-tooltip text="Speed of sound in water" location="left">
@@ -58,10 +80,10 @@
           <span class="text-caption text-medium-emphasis mr-1">m/s</span>
         </div>
         <div class="d-flex align-center gap-2">
-          <v-slider v-model="settings.speed_of_sound" :min="1400" :max="1600" :step="1" density="compact" hide-details
+          <v-slider color="white" v-model="settings.speed_of_sound" :min="1400" :max="1600" :step="1" density="compact" hide-details
             class="flex-grow-1" @update:model-value="debouncedSaveSettings"></v-slider>
           <v-text-field v-model.number="settings.speed_of_sound" type="number" :min="1400" :max="1600" :step="1"
-            density="compact" hide-details style="width: 80px" @update:model-value="debouncedSaveSettings"></v-text-field>
+            density="compact" hide-details style="width: 10px" @update:model-value="debouncedSaveSettings"></v-text-field>
         </div>
       </div>
     </v-card-text>
@@ -70,7 +92,7 @@
 
 <script setup>
 import { useDebounceFn } from '@vueuse/core';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
   serverUrl: {
@@ -87,11 +109,17 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(['close']);
+
 const DEBOUNCE_VALUE_MS = 500;
 
 const isLoading = ref(false);
 const isInitializing = ref(true);
 const rawAutoMode = ref(1);
+
+const handleClose = () => {
+  emit('close');
+};
 
 const isAutoMode = computed({
   get: () => Boolean(rawAutoMode.value),
@@ -105,6 +133,19 @@ const settings = ref({
   scan_length: 10,
   gain_setting: 0,
   speed_of_sound: 1500,
+  ping_interval: 25,
+});
+
+const pingsPerSecond = computed({
+  get: () =>
+    settings.value.ping_interval > 0 ? Math.round(1000 / settings.value.ping_interval) : 0,
+  set: (value) => {
+    if (value > 0) {
+      settings.value.ping_interval = Math.round(1000 / Math.max(1, value));
+    } else {
+      settings.value.ping_interval = 0;
+    }
+  },
 });
 
 const gainOptions = [
@@ -136,6 +177,15 @@ const debouncedSaveSettings = useDebounceFn(async () => {
       });
     }
 
+    if (settings.value.ping_interval > 0) {
+      await sendCommand('SetPingInterval', {
+        ping_interval: settings.value.ping_interval,
+      });
+      await enableContinuousMode();
+    } else {
+      await disableContinuousMode();
+    }
+
     await sendCommand('SetSpeedOfSound', {
       speed_of_sound: Math.round(settings.value.speed_of_sound * 1000),
     });
@@ -143,6 +193,56 @@ const debouncedSaveSettings = useDebounceFn(async () => {
     console.error('Error saving settings:', error);
   }
 }, DEBOUNCE_VALUE_MS);
+
+const enableContinuousMode = async () => {
+  try {
+    await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'EnableContinuousMode',
+        module: 'DeviceManager',
+        payload: {
+          uuid: props.deviceId,
+        },
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to enable continuous mode:', error);
+  }
+};
+
+const disableContinuousMode = async () => {
+  try {
+    await fetch(`${props.serverUrl}/device_manager/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        command: 'DisableContinuousMode',
+        module: 'DeviceManager',
+        payload: {
+          uuid: props.deviceId,
+        },
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to disable continuous mode:', error);
+  }
+};
+
+const manualPing = async () => {
+  try {
+    await sendCommand('Profile');
+  } catch (error) {
+    console.error('Failed to send manual ping:', error);
+  }
+};
 
 const handleAutoModeChange = () => {
   debouncedSaveSettings();
@@ -152,7 +252,7 @@ const fetchCurrentSettings = async () => {
   isLoading.value = true;
   isInitializing.value = true;
   try {
-    const settingsToFetch = ['ModeAuto', 'Range', 'GainSetting', 'SpeedOfSound'];
+    const settingsToFetch = ['ModeAuto', 'Range', 'GainSetting', 'SpeedOfSound', 'PingInterval'];
 
     for (const setting of settingsToFetch) {
       const response = await sendCommand(setting);
@@ -172,6 +272,9 @@ const fetchCurrentSettings = async () => {
             break;
           case 'SpeedOfSound':
             settings.value.speed_of_sound = Math.round(data.speed_of_sound / 1000);
+            break;
+          case 'PingInterval':
+            settings.value.ping_interval = data.ping_interval;
             break;
         }
       }
@@ -234,37 +337,3 @@ onMounted(async () => {
   }
 });
 </script>
-
-<style scoped>
-.space-y-4>*+* {
-  margin-top: 1rem;
-}
-
-.gap-2 {
-  gap: 0.5rem;
-}
-
-.settings-scroll {
-  overflow-y: auto;
-  max-height: calc(80vh - 64px);
-  padding: 16px;
-}
-
-.settings-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.settings-scroll::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.settings-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-}
-
-.settings-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-</style>

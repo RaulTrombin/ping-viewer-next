@@ -5,6 +5,7 @@
 </template>
 
 <script>
+import { onKeyStroke } from '@vueuse/core';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 export default {
@@ -203,7 +204,7 @@ export default {
       if (redrawAll) {
         textureData.fill(0);
 
-        measurementHistory.value.forEach((measurement, columnIndex) => {
+        for (const [columnIndex, measurement] of measurementHistory.value.entries()) {
           if (columnIndex >= newWidth) return;
 
           const x = newWidth - 1 - columnIndex;
@@ -238,7 +239,7 @@ export default {
               textureData[index + 3] = color[3] !== undefined ? color[3] : 255;
             }
           }
-        });
+        }
       } else {
         // Just shift existing data
         for (let y = 0; y < newHeight; y++) {
@@ -417,6 +418,21 @@ export default {
         render();
       }
     }
+
+    function clearShaderContent() {
+      measurementHistory.value = [];
+      pendingUpdates.value = [];
+
+      virtualMaxDepth.value = props.maxDepth;
+
+      if (textureData) {
+        textureData.fill(0);
+      }
+    }
+
+    onKeyStroke(['r', 'R'], () => {
+      clearShaderContent();
+    });
 
     onMounted(() => {
       resizeCanvas();

@@ -5,7 +5,7 @@
 
 
         <!-- Device List -->
-        <div class="device-list mb-4">
+        <div class="device-list mt-1 mb-2">
           <div v-if="isLoading" class="d-flex justify-center my-4">
             <v-progress-circular indeterminate />
           </div>
@@ -20,7 +20,10 @@
             <v-list-item v-for="device in devices" :key="device.id" :value="device" class="mb-2"
               @click="selectDevice(device)">
               <template v-slot:prepend>
-                <v-icon :icon="device.device_type === 'Ping360' ? 'mdi-radar' : 'mdi-altimeter'" />
+                <v-badge :content="isDeviceRecording(device.id) ? 'Rec' : ''" :location="'top end'" color="error"
+                  :model-value="isDeviceRecording(device.id)">
+                  <v-icon :icon="device.device_type === 'Ping360' ? 'mdi-radar' : 'mdi-altimeter'" />
+                </v-badge>
               </template>
 
               <v-list-item-title>{{ device.device_type }}</v-list-item-title>
@@ -49,22 +52,21 @@
 
               <template v-slot:append>
                 <div class="d-flex align-center gap-2">
-                  <v-chip variant="elevated" :color="getStatusColor(device.status)" size="small">
+                  <v-btn variant="elevated" class="rounded-lg -mb-1" :color="getStatusColor(device.status)" size="small">
                     {{ device.status }}
-                  </v-chip>
+                  </v-btn>
 
                   <v-menu location="start" offset="5">
                     <template v-slot:activator="{ props }">
-                      <v-btn v-bind="props" variant="tonal" icon size="small" density="compact">
+                      <v-btn v-bind="props" variant="text" icon size="22" density="compact" class="-mr-2 ml-2">
                         <v-icon>mdi-dots-vertical</v-icon>
                       </v-btn>
                     </template>
 
-                    <v-card :class="{ 'glass': glass }" min-width="200">
-                      <v-list :class="{ 'glass-inner': glass }" density="compact">
-                        <v-list-subheader>Device Actions</v-list-subheader>
-
-                        <v-list-item @click="selectDevice(device)">
+                    <v-card :class="{ 'glass': glass }" min-width="200"   >
+                      <v-list :class="{ 'glass-inner': glass }" density="compact" class="pa-0 pb-2">
+                        <v-list-subheader class="windowHeader">Device Actions</v-list-subheader>
+                        <v-list-item @click="selectDevice(device)" class="mt-2">
                           <template v-slot:prepend>
                             <v-icon variant="tonal">mdi-open-in-new</v-icon>
                           </template>
@@ -90,7 +92,29 @@
                           <v-list-item-subtitle>Start device data stream</v-list-item-subtitle>
                         </v-list-item>
 
-                        <v-divider class="my-2"></v-divider>
+                        <v-divider v-if="isDeviceRecording(device.id) || (device.status === 'ContinuousMode' || device.status === 'Running')" ></v-divider>
+
+                        <v-list-item v-if="isDeviceRecording(device.id)" @click="stopRecording(device.id)"
+                          :disabled="loadingStates[device.id]">
+                          <template v-slot:prepend>
+                            <v-icon color="error">mdi-stop</v-icon>
+                          </template>
+                          <v-list-item-title>Stop Recording</v-list-item-title>
+                          <v-list-item-subtitle>Stop recording device data</v-list-item-subtitle>
+                        </v-list-item>
+
+                        <v-list-item v-else-if="device.status === 'ContinuousMode' || device.status === 'Running'"
+                          @click="startRecording(device.id)"
+                          :disabled="loadingStates[device.id]">
+                          <template v-slot:prepend>
+                            <v-icon color="success">mdi-record</v-icon>
+                          </template>
+                          <v-list-item-title>Start Recording</v-list-item-title>
+                          <v-list-item-subtitle>Start recording device data</v-list-item-subtitle>
+                        </v-list-item>
+
+                        <v-divider v-if="isDeviceRecording(device.id) || (device.status === 'ContinuousMode' || device.status === 'Running')" class="my-2"></v-divider>
+                        <v-divider v-else class="my-2"></v-divider>
 
                         <v-list-item @click="confirmDelete(device)" :disabled="loadingStates[device.id]">
                           <template v-slot:prepend>
@@ -110,17 +134,18 @@
 
         <v-menu location="start" offset="10">
           <template v-slot:activator="{ props }">
-            <v-btn v-bind="props" variant="tonal">
-              <v-icon start>mdi-cog</v-icon>
-              Advanced
-            </v-btn>
+            <div class="flex w-full justify-end" style="position: relative;">
+              <v-btn v-bind="props" variant="plain" size="small"  class="mb-1 mr-1">
+                Advanced settings
+              </v-btn>
+            </div>
           </template>
 
           <v-card :class="{ 'glass': glass }" min-width="200">
-            <v-list :class="{ 'glass-inner': glass }">
-              <v-list-subheader>Device Manager Actions</v-list-subheader>
+            <v-list :class="{ 'glass-inner': glass }"  class="pa-0 pb-1">
+              <v-list-subheader class="windowHeader py-0">Device Manager Actions</v-list-subheader>
 
-              <v-list-item @click="autoCreateDevices" :disabled="isAutoCreating">
+              <v-list-item  class="py-2" @click="autoCreateDevices" :disabled="isAutoCreating">
                 <template v-slot:prepend>
                   <v-icon variant="tonal">mdi-plus-network</v-icon>
                 </template>
@@ -128,7 +153,7 @@
                 <v-list-item-subtitle>Automatically run devices</v-list-item-subtitle>
               </v-list-item>
 
-              <v-list-item @click="toggleManualCreate">
+              <v-list-item  class="py-2"@click="toggleManualCreate">
                 <template v-slot:prepend>
                   <v-icon variant="tonal">mdi-plus</v-icon>
                 </template>
@@ -136,7 +161,7 @@
                 <v-list-item-subtitle>Configure device manually</v-list-item-subtitle>
               </v-list-item>
 
-              <v-list-item @click="refreshDevices" :disabled="isRefreshing">
+              <v-list-item  class="py-2"@click="refreshDevices" :disabled="isRefreshing">
                 <template v-slot:prepend>
                   <v-icon variant="tonal">mdi-refresh</v-icon>
                 </template>
@@ -204,7 +229,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { inject, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
   serverUrl: {
@@ -234,6 +259,43 @@ const showDeleteDialog = ref(false);
 const deviceToDelete = ref(null);
 const error = ref(null);
 const loadingStates = ref({});
+
+const recordingSessions = inject('recordingSessions');
+
+const isDeviceRecording = (deviceId) => {
+  const session = recordingSessions.value.get(deviceId);
+  return session?.is_active || false;
+};
+
+const fetchInitialRecordingStatuses = async () => {
+  try {
+    const response = await fetch(`${props.serverUrl}/v1/recordings_manager/list`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording statuses');
+    }
+    const data = await response.json();
+    if (data.AllRecordingStatus) {
+      for (const session of data.AllRecordingStatus) {
+        recordingSessions.value.set(session.device_id, session);
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching initial recording statuses:', err);
+  }
+};
+
+watch(
+  () => props.isOpen,
+  async (newValue) => {
+    if (newValue) {
+      await fetchInitialRecordingStatuses();
+    }
+  }
+);
+
+onMounted(async () => {
+  await fetchInitialRecordingStatuses();
+});
 
 const newDevice = ref({
   device_selection: 'Auto',
@@ -419,6 +481,54 @@ const disableContinuousMode = async (deviceId) => {
   }
 };
 
+const startRecording = async (deviceId) => {
+  loadingStates.value[deviceId] = true;
+  try {
+    const response = await fetch(
+      `${props.serverUrl}/v1/recordings_manager/${deviceId}/StartRecording`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to start recording');
+    }
+  } catch (err) {
+    console.error('Error starting recording:', err);
+    error.value = `Failed to start recording: ${err.message}`;
+  } finally {
+    loadingStates.value[deviceId] = false;
+  }
+};
+
+const stopRecording = async (deviceId) => {
+  loadingStates.value[deviceId] = true;
+  try {
+    const response = await fetch(
+      `${props.serverUrl}/v1/recordings_manager/${deviceId}/StopRecording`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to stop recording');
+    }
+  } catch (err) {
+    console.error('Error stopping recording:', err);
+    error.value = `Failed to stop recording: ${err.message}`;
+  } finally {
+    loadingStates.value[deviceId] = false;
+  }
+};
+
 const confirmDelete = (device) => {
   deviceToDelete.value = device;
   showDeleteDialog.value = true;
@@ -513,7 +623,7 @@ onUnmounted(() => {
 }
 
 .menu-content {
-  padding: 1rem;
+  padding: 0;
 }
 
 .device-list {

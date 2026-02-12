@@ -833,7 +833,7 @@ impl DeviceManager {
     pub async fn list(&self) -> Result<Answer, ManagerError> {
         if self.device.is_empty() {
             trace!("No devices available for list generation request");
-            return Err(ManagerError::NoDevices);
+            return Ok(Answer::DeviceInfo(Vec::new()));
         };
         let mut list = Vec::new();
         for device in self.device.values() {
@@ -923,6 +923,10 @@ impl DeviceManager {
                     "Unexpected response during auto create: {unexpected:?}, device: {device_id}"
                 ))),
             },
+            Ok(DeviceStatus::ContinuousMode) => {
+                let updated_device_info = self.get_device(device_id)?.info();
+                Ok(Answer::DeviceInfo(vec![updated_device_info]))
+            }
             Ok(DeviceStatus::Running) => {
                 let device_type = self.get_device_type(device_id)?;
 
